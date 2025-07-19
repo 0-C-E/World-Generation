@@ -4,7 +4,8 @@ FROM rust:alpine3.22
 RUN apk add --no-cache bash git python3 py3-pip \
     libx11 libxext libxrender libxpm libxtst \ 
     tk python3-tkinter tcl tk-dev xclock \
-    ttf-dejavu fontconfig
+    ttf-dejavu fontconfig \
+    build-base musl-dev
 
 # Setup default user
 ARG USERNAME=vscode

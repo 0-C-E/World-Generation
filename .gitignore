@@ -1,5 +1,6 @@
-# Generated images
+# Generated files
 chunks/
+world_save.json
 
 # Environments
 .env

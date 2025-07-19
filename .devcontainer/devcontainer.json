@@ -1,5 +1,5 @@
 {
-    "name": "Template Development Container",
+    "name": "0 C.E. World Generation",
     "dockerFile": "Dockerfile",
     "customizations": {
         "settings": {
