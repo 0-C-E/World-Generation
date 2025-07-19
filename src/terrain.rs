@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use crate::{CITY_RADIUS, MAP_SIZE, WATER};
+use crate::config::{CITY_RADIUS, MAP_SIZE, WATER};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Terrain {

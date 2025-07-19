@@ -1,6 +1,7 @@
-use crate::terrain::{Terrain, is_large_water_region};
-use crate::{CITY_RADIUS, CITY_SPACING, MAP_SIZE};
 use std::collections::HashMap;
+
+use crate::terrain::{Terrain, is_large_water_region};
+use crate::config::{CITY_RADIUS, CITY_SPACING, MAP_SIZE};
 
 pub fn find_city_slots(terrain: &Vec<Vec<Terrain>>) -> Vec<(usize, usize)> {
     let mut slots = Vec::new();

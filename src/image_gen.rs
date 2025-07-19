@@ -3,13 +3,17 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use image::{RgbImage, Rgb};
 use rayon::prelude::*;
+
+use crate::config::{MAP_SIZE, CHUNK_SIZE, WATER};
 use crate::terrain::Terrain;
-use crate::{MAP_SIZE, CHUNK_SIZE, CHUNK_FOLDER, CITY_SLOT_COLOR};
+use crate::CHUNK_FOLDER;
+
+const CITY_SLOT_COLOR: image::Rgb<u8> = image::Rgb([100, 100, 100]);
 
 pub fn get_color(terrain: Terrain, elevation: f64) -> Rgb<u8> {
     match terrain {
         Terrain::Water => {
-            let t_raw = ((elevation - 0.2) / (crate::WATER - 0.2)).clamp(0.0, 1.0);
+            let t_raw = ((elevation - 0.2) / (WATER - 0.2)).clamp(0.0, 1.0);
             let t = t_raw.powf(0.5); // Slower transition to deep water
             let r = ((1.0 - t) * 17.0 + t * 70.0) as u8;
             let g = ((1.0 - t) * 55.0 + t * (150.0 + elevation * 80.0)) as u8;
@@ -17,9 +21,9 @@ pub fn get_color(terrain: Terrain, elevation: f64) -> Rgb<u8> {
             Rgb([r, g, b])
         }
         Terrain::Land => {
-            if elevation < crate::WATER + 0.02 {
+            if elevation < WATER + 0.02 {
                 Rgb([229, 216, 176])
-            } else if elevation < crate::WATER + 0.15 {
+            } else if elevation < WATER + 0.15 {
                 let green_base = 120.0 + elevation * 100.0;
                 let green_var = (30.0 * (elevation * 20.0).sin()) as i32;
                 let r = (40.0 + elevation * 60.0) as u8;
@@ -27,7 +31,7 @@ pub fn get_color(terrain: Terrain, elevation: f64) -> Rgb<u8> {
                 let b = (30.0 + elevation * 40.0) as u8;
                 Rgb([r, g, b])
             } else if elevation < 0.75 {
-                let t = (elevation - (crate::WATER + 0.1)) / (0.7 - (crate::WATER + 0.1));
+                let t = (elevation - (WATER + 0.1)) / (0.7 - (WATER + 0.1));
                 let r = ((1.0 - t) * 80.0 + t * 140.0) as u8;
                 let g = ((1.0 - t) * 100.0 + t * 110.0) as u8;
                 let b = ((1.0 - t) * 60.0 + t * 90.0) as u8;
