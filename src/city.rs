@@ -1,12 +1,11 @@
 use crate::terrain::{Terrain, is_large_water_region};
-use crate::{MAP_SIZE, CITY_SPACING};
+use crate::{CITY_RADIUS, CITY_SPACING, MAP_SIZE};
 use std::collections::HashMap;
 
 pub fn find_city_slots(terrain: &Vec<Vec<Terrain>>) -> Vec<(usize, usize)> {
     let mut slots = Vec::new();
     let center = MAP_SIZE / 2;
     let mut taken = vec![vec![false; MAP_SIZE]; MAP_SIZE];
-    let city_radius = (MAP_SIZE as f64 / 2.0) * 0.8;
 
     for y in CITY_SPACING..(MAP_SIZE - CITY_SPACING) {
         for x in CITY_SPACING..(MAP_SIZE - CITY_SPACING) {
@@ -14,7 +13,7 @@ pub fn find_city_slots(terrain: &Vec<Vec<Terrain>>) -> Vec<(usize, usize)> {
             let dy = (y as isize - center as isize) as f64;
             let dist_to_center = (dx * dx + dy * dy).sqrt();
 
-            if dist_to_center > city_radius {
+            if dist_to_center > CITY_RADIUS {
                 continue;
             }
             if terrain[y][x] == Terrain::Land {
@@ -52,6 +51,7 @@ fn count_direct_neighbors(terrain: &Vec<Vec<Terrain>>, x: usize, y: usize) -> (u
                         water_count += 1;
                         water_neighbors.push((nx, ny));
                     }
+                    Terrain::FarLand => {}
                 }
             }
         }

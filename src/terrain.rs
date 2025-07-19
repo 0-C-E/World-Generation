@@ -1,20 +1,28 @@
 use std::collections::VecDeque;
 
-use crate::{MAP_SIZE, WATER};
+use crate::{CITY_RADIUS, MAP_SIZE, WATER};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Terrain {
     Water,
     Land,
+    FarLand, // Beyond world edge
 }
 
 pub fn classify_terrain(elevation: &Vec<Vec<f64>>) -> Vec<Vec<Terrain>> {
     let mut terrain = vec![vec![Terrain::Land; MAP_SIZE]; MAP_SIZE];
+    let center = MAP_SIZE / 2;
+
     for y in 0..MAP_SIZE {
         for x in 0..MAP_SIZE {
+            let dx = (x as isize - center as isize) as f64;
+            let dy = (y as isize - center as isize) as f64;
+            let dist_to_center = (dx * dx + dy * dy).sqrt();
             let e = elevation[y][x];
             terrain[y][x] = if e < WATER {
                 Terrain::Water
+            } else if dist_to_center > CITY_RADIUS * 1.1 {
+                Terrain::FarLand
             } else {
                 Terrain::Land
             };

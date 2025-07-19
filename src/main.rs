@@ -19,7 +19,7 @@ const WATER: f64 = 0.55;
 
 const CITY_SPACING: usize = 5;
 const MIN_CITY_SLOTS_PER_ISLAND: usize = 6;
-
+const CITY_RADIUS: f64 = (MAP_SIZE as f64 / 2.0) * 0.8;
 const CHUNK_SIZE: usize = 250;
 const CHUNK_FOLDER: &str = "chunks";
 

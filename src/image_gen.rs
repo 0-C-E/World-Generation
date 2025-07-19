@@ -40,6 +40,13 @@ pub fn get_color(terrain: Terrain, elevation: f64) -> Rgb<u8> {
                 Rgb([r, g, b])
             }
         }
+        Terrain::FarLand => {
+            let t = (elevation - 0.8) / 0.2;
+            let r = (200.0 + t * 55.0) as u8;
+            let g = (180.0 + t * 75.0) as u8;
+            let b = (160.0 + t * 95.0) as u8;
+            Rgb([r, g, b])
+        }
     }
 }
 
