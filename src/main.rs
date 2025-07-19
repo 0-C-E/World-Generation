@@ -8,9 +8,7 @@ mod terrain;
 
 use city::{find_city_slots, filter_city_slots_by_region};
 use image_gen::generate_image_chunks;
-use save::{WorldSave, IslandInfo, CityInfo};
-use std::fs::File;
-use std::io::Write;
+use save::save_world_data;
 
 // Constants
 const MAP_SIZE: usize = 5_000;
@@ -25,6 +23,7 @@ const CITY_SPACING: usize = 5;
 const MIN_CITY_SLOTS_PER_ISLAND: usize = 6;
 const CITY_RADIUS: f64 = (MAP_SIZE as f64 / 2.0) * 0.8;
 const CHUNK_SIZE: usize = 250;
+const SAVE_FILE: &str = "world_save.json";
 const CHUNK_FOLDER: &str = "chunks";
 
 const CITY_SLOT_COLOR: image::Rgb<u8> = image::Rgb([100, 100, 100]);
@@ -74,46 +73,8 @@ fn main() {
     // Save world data to file
     println!("Saving world data...");
     step_time = Instant::now();
-    let mut islands = Vec::new();
-    let mut region_tiles: std::collections::HashMap<usize, Vec<(usize, usize)>> = std::collections::HashMap::new();
-
-    for y in 0..MAP_SIZE {
-        for x in 0..MAP_SIZE {
-            let region_id = region_map[y][x];
-            if region_id > 0 {
-                region_tiles.entry(region_id).or_default().push((x, y));
-            }
-        }
-    }
-    println!("Region labeling took {:.2?}", step_time.elapsed());
-
-    step_time = Instant::now();
-    for (&region_id, tiles) in &region_tiles {
-        let city_slots: Vec<CityInfo> = filtered_city_slots.iter()
-            .filter(|&&(x, y)| region_map[y][x] == region_id)
-            .map(|&(x, y)| CityInfo { x, y, region_id })
-            .collect();
-        if !city_slots.is_empty() {
-            islands.push(IslandInfo {
-                region_id,
-                tiles: tiles.clone(),
-                city_slots,
-                size: tiles.len(),
-            });
-        }
-    }
-    println!("Region processing took {:.2?}", step_time.elapsed());
-    step_time = Instant::now();
-
-    let world_save = WorldSave { islands };
-
-    // Save to file
-    println!("Saving world data to file...");
-    let json = serde_json::to_string_pretty(&world_save).unwrap();
-    let mut file = File::create("world_save.json").unwrap();
-    file.write_all(json.as_bytes()).unwrap();
-    println!("World data saved to world_save.json");
-    println!("Saving to file took {:.2?}", step_time.elapsed());
+    save_world_data(&region_map, &filtered_city_slots, SAVE_FILE);
+    println!("Saved data to '{}' in {:.2?}", SAVE_FILE, step_time.elapsed());
 
     println!("Total generation time: {:.2?}", start_time.elapsed());
 }
