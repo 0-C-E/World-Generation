@@ -114,7 +114,8 @@ This project supports displaying the generated world using matplotlib with X11 f
 
 3. **Test the setup** as above
 
-> **Note:** macOS X11 support can be unreliable. Consider using `plt.savefig()` as a fallback.
+> [!NOTE]
+> macOS X11 support can be unreliable. Consider using `plt.savefig()` as a fallback.
 
 #### 🐧 Linux
 
