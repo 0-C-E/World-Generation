@@ -1,14 +1,10 @@
 use std::fs;
-use std::sync::Arc;
-use std::collections::HashMap;
 use image::{RgbImage, Rgb};
 use rayon::prelude::*;
 
 use crate::config::{MAP_SIZE, CHUNK_SIZE, WATER};
 use crate::terrain::Terrain;
 use crate::CHUNK_FOLDER;
-
-const CITY_SLOT_COLOR: image::Rgb<u8> = image::Rgb([100, 100, 100]);
 
 pub fn get_color(terrain: Terrain, elevation: f64) -> Rgb<u8> {
     match terrain {
@@ -90,38 +86,11 @@ fn blend_rgb_colors(color1: Rgb<u8>, color2: [u8; 3], t: f64) -> Rgb<u8> {
     blend_colors([color1[0], color1[1], color1[2]], color2, t)
 }
 
-pub fn draw_city_circle(img: &mut RgbImage, cx: usize, cy: usize, color: Rgb<u8>) {
-    let radius = 3i32;
-    let (width, height) = (img.width() as i32, img.height() as i32);
-
-    for dy in -radius..=radius {
-        for dx in -radius..=radius {
-            if dx * dx + dy * dy <= radius * radius {
-                let px = cx as i32 + dx;
-                let py = cy as i32 + dy;
-                if px >= 0 && px < width && py >= 0 && py < height {
-                    img.put_pixel(px as u32, py as u32, color);
-                }
-            }
-        }
-    }
-}
-
 pub fn generate_image_chunks(
     terrain: &Vec<Vec<Terrain>>,
     elevation: &Vec<Vec<f64>>,
-    city_slots: &Vec<(usize, usize)>
 ) {
     fs::create_dir_all(CHUNK_FOLDER).expect("Failed to create chunk folder");
-
-    // Group cities by chunk coordinate
-    let mut city_by_chunk: HashMap<(usize, usize), Vec<(usize, usize)>> = HashMap::new();
-    for &(x, y) in city_slots {
-        let chunk_x = x / CHUNK_SIZE;
-        let chunk_y = y / CHUNK_SIZE;
-        city_by_chunk.entry((chunk_x, chunk_y)).or_default().push((x, y));
-    }
-    let city_by_chunk = Arc::new(city_by_chunk);
 
     let num_chunks_x = MAP_SIZE / CHUNK_SIZE;
     let num_chunks_y = MAP_SIZE / CHUNK_SIZE;
@@ -142,13 +111,6 @@ pub fn generate_image_chunks(
                     let elevation_val = elevation[global_y][global_x];
                     let color = get_color(terrain_val, elevation_val);
                     img.put_pixel(ix as u32, iy as u32, color);
-                }
-            }
-
-            // Draw city circles
-            if let Some(cities) = city_by_chunk.get(&(cx, cy)) {
-                for &(city_x, city_y) in cities {
-                    draw_city_circle(&mut img, city_x - x0, city_y - y0, CITY_SLOT_COLOR);
                 }
             }
 

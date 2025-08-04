@@ -56,7 +56,7 @@ fn main() {
 
     println!("Generating image chunks...");
     step_time = Instant::now();
-    generate_image_chunks(&terrain, &elevation, &filtered_city_slots);
+    generate_image_chunks(&terrain, &elevation);
     println!("Image generation took {:.2?}", step_time.elapsed());
 
     // Save world data to file
