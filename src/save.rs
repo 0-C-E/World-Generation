@@ -1,17 +1,17 @@
 use serde::{Serialize, Deserialize};
 use std::fs::File;
-use std::io::Write;
+use std::io::BufWriter;
+use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize)]
 pub struct CityInfo {
-    pub x: usize,
-    pub y: usize,
-    pub region_id: usize,
+    pub x: u16,
+    pub y: u16,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct IslandInfo {
-    pub region_id: usize,
+    pub region_id: u16,
     pub city_slots: Vec<CityInfo>,
 }
 
@@ -25,33 +25,25 @@ pub fn save_world_data(
     filtered_city_slots: &Vec<(usize, usize)>,
     file_path: &str,
 ) {
-    let mut islands = Vec::new();
-    let mut region_tiles: std::collections::HashMap<usize, Vec<(usize, usize)>> = std::collections::HashMap::new();
+    let mut region_cities: HashMap<u16, Vec<CityInfo>> = HashMap::with_capacity(100);
 
-    for y in 0..region_map.len() {
-        for x in 0..region_map[0].len() {
-            let region_id = region_map[y][x];
-            if region_id > 0 {
-                region_tiles.entry(region_id).or_default().push((x, y));
-            }
-        }
-    }
-
-    for (region_id, _) in &region_tiles {
-        let city_slots: Vec<CityInfo> = filtered_city_slots.iter()
-            .filter(|&&(x, y)| region_map[y][x] == *region_id)
-            .map(|&(x, y)| CityInfo { x, y, region_id: *region_id })
-            .collect();
-        if !city_slots.is_empty() {
-            islands.push(IslandInfo {
-                region_id: *region_id,
-                city_slots,
+    for &(x, y) in filtered_city_slots {
+        let region_id = region_map[y][x] as u16;
+        if region_id > 0 {
+            region_cities.entry(region_id).or_default().push(CityInfo {
+                x: x as u16,
+                y: y as u16
             });
         }
     }
 
+    let islands: Vec<IslandInfo> = region_cities.into_iter()
+        .map(|(region_id, city_slots)| IslandInfo { region_id, city_slots })
+        .collect();
+
     let world_save = WorldSave { islands };
-    let json = serde_json::to_string_pretty(&world_save).unwrap();
-    let mut file = File::create(file_path).unwrap();
-    file.write_all(json.as_bytes()).unwrap();
+
+    let file = File::create(file_path).unwrap();
+    let writer = BufWriter::new(file);
+    serde_json::to_writer(writer, &world_save).unwrap();
 }
