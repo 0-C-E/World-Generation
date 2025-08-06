@@ -2,7 +2,7 @@ FROM rust:alpine3.22
 
 # Install common tools and X11 libraries
 RUN apk add --no-cache bash git python3 py3-pip \
-    libx11 libxext libxrender libxpm libxtst \ 
+    libx11 libxext libxrender libxpm libxtst \
     tk python3-tkinter tcl tk-dev xclock \
     ttf-dejavu fontconfig
 
