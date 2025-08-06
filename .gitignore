@@ -1,6 +1,7 @@
 # Super-linter outputs
 super-linter-output
 super-linter.log
+.prettierignore
 
 # GitHub Actions leftovers
 github_conf
