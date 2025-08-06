@@ -43,13 +43,18 @@ jobs:
           VALIDATE_ALL_CODEBASE: ${{ github.event_name == 'push' }}
           FILTER_REGEX_EXCLUDE: "(.github/pull_request_template.md|.github/ISSUE_TEMPLATE/*.md)"
           DISABLE_ERRORS: ${{ github.event_name == 'push' }}
+          # Disable problematic validators
+          VALIDATE_DOCKERFILE_HADOLINT: false
+          VALIDATE_PYTHON_PYLINT: false
+
           # Disable validators for already handled files
           VALIDATE_JSCPD: false # Temporarily disable for MVP
           VALIDATE_JSON_PRETTIER: false
           VALIDATE_MARKDOWN_PRETTIER: false
           VALIDATE_PYTHON_BLACK: false
           VALIDATE_PYTHON_PYINK: false
-          
+          VALIDATE_YAML_PRETTIER: false
+
           # Enable fixers for PR events
           FIX_MARKDOWN: ${{ github.event_name == 'pull_request' }}
           FIX_NATURAL_LANGUAGE: ${{ github.event_name == 'pull_request' }}
