@@ -59,6 +59,8 @@ jobs:
           FIX_MARKDOWN: ${{ github.event_name == 'pull_request' }}
           FIX_NATURAL_LANGUAGE: ${{ github.event_name == 'pull_request' }}
           FIX_PYTHON_RUFF: ${{ github.event_name == 'pull_request' }}
+          FIX_RUST_2021: ${{ github.event_name == 'pull_request' }}
+          FIX_RUST_CLIPPY: ${{ github.event_name == 'pull_request' }}
 
       - name: Commit and push fixes
         if: github.event_name == 'pull_request' && github.event.pull_request.head.ref != github.event.repository.default_branch
