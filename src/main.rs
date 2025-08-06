@@ -43,27 +43,27 @@ fn main() {
     let elevation = generate_elevation(SEED);
     println!("Elevation took {:.2?}", step_time.elapsed());
     step_time = Instant::now();
-    
+
     println!("Classifying terrain...");
     let terrain = classify_terrain(&elevation);
     println!("Terrain classification took {:.2?}", step_time.elapsed());
     step_time = Instant::now();
-    
+
     println!("Labeling regions...");
     let region_map = label_regions(&terrain);
     println!("Region labeling took {:.2?}", step_time.elapsed());
     step_time = Instant::now();
-    
+
     println!("Finding city slots...");
     let city_slots = find_city_slots(&terrain);
     println!("City slots finding took {:.2?}", step_time.elapsed());
     step_time = Instant::now();
-    
+
     println!("Filtering city slots by region...");
     let filtered_city_slots = filter_city_slots_by_region(&city_slots, &region_map, MIN_CITY_SLOTS_PER_ISLAND);
     println!("City slots filtering took {:.2?}", step_time.elapsed());
     step_time = Instant::now();
-    
+
     println!("City slots after filtering: {}", filtered_city_slots.len());
     if filtered_city_slots.is_empty() {
         println!("No valid city slots found, exiting.");
@@ -71,7 +71,7 @@ fn main() {
     }
     println!("City slots filtering took {:.2?}", step_time.elapsed());
     step_time = Instant::now();
-    
+
     println!("Generating image chunks...");
     generate_image_chunks(&terrain, &elevation, &filtered_city_slots);
     println!("Image generation took {:.2?}", step_time.elapsed());
