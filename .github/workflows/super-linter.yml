@@ -35,7 +35,6 @@ jobs:
         run: |
           echo ".github/" > .prettierignore
           npx prettier --write . --print-width 80 --no-semi --single-quote --tab-width 4 --trailing-comma es5 --no-use-tabs --ignore-path .prettierignore
-          npx prettier --write \"**/*.{yml,yaml,md}\" --tab-width 2 --ignore-path .prettierignore
 
       - name: Run Super Linter
         uses: super-linter/super-linter/slim@v7
