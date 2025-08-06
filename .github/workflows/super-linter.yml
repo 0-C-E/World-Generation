@@ -30,10 +30,9 @@ jobs:
           pip install black
           black --line-length=120 .
 
-      - name: Run Prettier in Front-End only
+      - name: Run Prettier
         if: github.event_name == 'pull_request'
         run: |
-          npm install
           npx prettier --write "**/*.{yml,yaml,md}" --tab-width 2
           npx prettier --write . --print-width 80 --no-semi --single-quote --tab-width 4 --trailing-comma es5 --no-use-tabs
 
