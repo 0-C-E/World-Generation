@@ -7,19 +7,19 @@ on:
   workflow_call:
     inputs:
       image_name:
-        description: 'The name of the Docker image'
+        description: "The name of the Docker image"
         required: true
         type: string
       dockerfile_path:
-        description: 'Path to the Dockerfile'
+        description: "Path to the Dockerfile"
         required: false
         type: string
-        default: './Dockerfile'
+        default: "./Dockerfile"
       context:
-        description: 'Build context for Docker'
+        description: "Build context for Docker"
         required: false
         type: string
-        default: '.'
+        default: "."
 
 jobs:
   build-and-scan:

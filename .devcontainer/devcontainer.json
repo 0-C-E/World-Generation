@@ -6,8 +6,12 @@
             "terminal.integrated.shell.linux": "/bin/bash"
         },
         "vscode": {
-            "extensions": ["esbenp.prettier-vscode"]
+            "extensions": ["ms-python.python", "rust-lang.rust-analyzer"]
         }
+    },
+    "postCreateCommand": "pip install -r requirements.txt",
+    "containerEnv": {
+        "DISPLAY": "host.docker.internal:0"
     },
     "remoteUser": "vscode"
 }
