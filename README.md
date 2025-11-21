@@ -8,9 +8,9 @@ This project supports displaying `matplotlib` figures (e.g. `plt.show()`) from i
 
 ### ✅ Requirements
 
-* DevContainer with X11 libraries (already configured in the `Dockerfile`)
-* An X11 server running on your **host machine**
-* `DISPLAY` environment variable set in `.devcontainer/devcontainer.json`
+- DevContainer with X11 libraries (already configured in the `Dockerfile`)
+- An X11 server running on your **host machine**
+- `DISPLAY` environment variable set in `.devcontainer/devcontainer.json`
 
 ## 🧭 Setup Instructions by Host OS
 
@@ -20,28 +20,27 @@ This project supports displaying `matplotlib` figures (e.g. `plt.show()`) from i
    We recommend [VcXsrv](https://sourceforge.net/projects/vcxsrv/)
 
 2. **Launch VcXsrv with these settings**:
-
-   * `Multiple windows`
-   * `Start no client`
-   * ✅ Check **Disable access control**
+    - `Multiple windows`
+    - `Start no client`
+    - ✅ Check **Disable access control**
 
 3. **Ensure your `.devcontainer/devcontainer.json` includes**:
 
-   ```json
-   "containerEnv": {
-     "DISPLAY": "host.docker.internal:0"
-   }
-   ```
+    ```json
+    "containerEnv": {
+      "DISPLAY": "host.docker.internal:0"
+    }
+    ```
 
 4. **Rebuild the DevContainer**
 
 5. **Test it**
    Inside the DevContainer:
 
-   ```bash
-   xclock  # should open a clock window on your host
-   python3 show_chunks.py  # should display the stitched image
-   ```
+    ```bash
+    xclock  # should open a clock window on your host
+    python3 show_chunks.py  # should display the stitched image
+    ```
 
 ### 🍏 macOS (with Docker Desktop)
 
@@ -50,18 +49,18 @@ This project supports displaying `matplotlib` figures (e.g. `plt.show()`) from i
 
 2. **Start XQuartz**, then enable network access:
 
-   ```bash
-   defaults write org.xquartz.X11 enable_iglx -bool true
-   xhost + 127.0.0.1
-   ```
+    ```bash
+    defaults write org.xquartz.X11 enable_iglx -bool true
+    xhost + 127.0.0.1
+    ```
 
 3. **Update `.devcontainer/devcontainer.json`**:
 
-   ```json
-   "containerEnv": {
-     "DISPLAY": "host.docker.internal:0"
-   }
-   ```
+    ```json
+    "containerEnv": {
+      "DISPLAY": "host.docker.internal:0"
+    }
+    ```
 
 4. **Rebuild the DevContainer**, then test as above.
 
@@ -72,27 +71,27 @@ This project supports displaying `matplotlib` figures (e.g. `plt.show()`) from i
 
 1. **Allow local X11 access**:
 
-   ```bash
-   xhost +local:
-   ```
+    ```bash
+    xhost +local:
+    ```
 
 2. **Expose your X11 socket to the container**
    Add this to your Docker run config or override file:
 
-   ```yml
-   volumes:
-     - /tmp/.X11-unix:/tmp/.X11-unix
-   environment:
-     DISPLAY: :0
-   ```
+    ```yml
+    volumes:
+        - /tmp/.X11-unix:/tmp/.X11-unix
+    environment:
+        DISPLAY: :0
+    ```
 
 3. **In `.devcontainer/devcontainer.json`**, set:
 
-   ```json
-   "containerEnv": {
-     "DISPLAY": ":0"
-   }
-   ```
+    ```json
+    "containerEnv": {
+      "DISPLAY": ":0"
+    }
+    ```
 
 4. **Rebuild the container**, and test `xclock` and your Python script.
 
@@ -108,6 +107,6 @@ This allows contributors without GUI/X11 support to still see the result.
 
 ## 📎 Related Files
 
-* [`show_chunks.py`](show_chunks.py) — loads chunked images and displays them in a GUI window
-* [`Dockerfile`](Dockerfile) — includes X11 libraries and font packages
-* [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) — sets the `DISPLAY` environment variable
+- [`show_chunks.py`](show_chunks.py) — loads chunked images and displays them in a GUI window
+- [`Dockerfile`](Dockerfile) — includes X11 libraries and font packages
+- [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) — sets the `DISPLAY` environment variable
