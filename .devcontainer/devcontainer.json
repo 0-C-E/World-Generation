@@ -1,17 +1,16 @@
 {
-    "name": "Template Development Container",
+    "name": "World Generation",
     "dockerFile": "Dockerfile",
     "customizations": {
-        "settings": {
-            "terminal.integrated.shell.linux": "/bin/bash"
-        },
         "vscode": {
-            "extensions": ["ms-python.python", "rust-lang.rust-analyzer"]
+            "extensions": [
+                "rust-lang.rust-analyzer",
+                "vadimcn.vscode-lldb",
+                "tamasfe.even-better-toml",
+                "fill-labs.dependi"
+            ]
         }
     },
-    "postCreateCommand": "pip install -r requirements.txt",
-    "containerEnv": {
-        "DISPLAY": "host.docker.internal:0"
-    },
+    "postCreateCommand": "cargo build",
     "remoteUser": "vscode"
 }
