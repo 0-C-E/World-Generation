@@ -1,27 +1,74 @@
+//! Terrain classification and region labeling.
+//!
+//! After elevation is generated, every tile is classified as [`Water`],
+//! [`Land`], or [`FarLand`] (decorative terrain beyond the playable area).
+//! Connected land tiles are then grouped into numbered regions via flood-fill
+//! so that each island gets a unique label.
+//!
+//! **All functions are parameterized** - nothing reads global constants. Pass
+//! the values from [`WorldConfig`](crate::config::WorldConfig).
+
 use std::collections::VecDeque;
 
-use crate::{CITY_RADIUS, MAP_SIZE, WATER};
+// ---------------------------------------------------------------------------
+// Terrain enum
+// ---------------------------------------------------------------------------
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// The three broad terrain categories for each tile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum Terrain {
-    Water,
-    Land,
-    FarLand, // Beyond world edge
+    Water = 0,
+    Land = 1,
+    /// Decorative land beyond the playable radius.
+    FarLand = 2,
 }
 
-pub fn classify_terrain(elevation: &Vec<Vec<f64>>) -> Vec<Vec<Terrain>> {
-    let mut terrain = vec![vec![Terrain::Land; MAP_SIZE]; MAP_SIZE];
-    let center = MAP_SIZE / 2;
+impl Terrain {
+    /// Convert to the `u8` discriminant used in the binary format.
+    pub fn to_u8(self) -> u8 {
+        self as u8
+    }
 
-    for y in 0..MAP_SIZE {
-        for x in 0..MAP_SIZE {
+    /// Convert from a raw `u8` (as stored in chunk data) back to a variant.
+    ///
+    /// Unknown values default to [`Water`](Terrain::Water).
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            1 => Terrain::Land,
+            2 => Terrain::FarLand,
+            _ => Terrain::Water,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Terrain classification
+// ---------------------------------------------------------------------------
+
+/// Assign a [`Terrain`] category to every tile.
+///
+/// * Elevation below `water_threshold` -> [`Water`](Terrain::Water)
+/// * Distance from center > `playable_radius * 1.1` -> [`FarLand`](Terrain::FarLand)
+/// * Everything else -> [`Land`](Terrain::Land)
+pub fn classify_terrain(
+    elevation: &[Vec<f64>],
+    map_size: usize,
+    water_threshold: f64,
+    playable_radius: f64,
+) -> Vec<Vec<Terrain>> {
+    let mut terrain = vec![vec![Terrain::Land; map_size]; map_size];
+    let center = map_size / 2;
+
+    for y in 0..map_size {
+        for x in 0..map_size {
             let dx = (x as isize - center as isize) as f64;
             let dy = (y as isize - center as isize) as f64;
-            let dist_to_center = (dx * dx + dy * dy).sqrt();
-            let e = elevation[y][x];
-            terrain[y][x] = if e < WATER {
+            let dist = (dx * dx + dy * dy).sqrt();
+
+            terrain[y][x] = if elevation[y][x] < water_threshold {
                 Terrain::Water
-            } else if dist_to_center > CITY_RADIUS * 1.1 {
+            } else if dist > playable_radius * 1.1 {
                 Terrain::FarLand
             } else {
                 Terrain::Land
@@ -31,14 +78,20 @@ pub fn classify_terrain(elevation: &Vec<Vec<f64>>) -> Vec<Vec<Terrain>> {
     terrain
 }
 
-pub fn label_regions(terrain: &Vec<Vec<Terrain>>) -> Vec<Vec<usize>> {
-    let mut labels = vec![vec![0; MAP_SIZE]; MAP_SIZE];
+// ---------------------------------------------------------------------------
+// Region labeling
+// ---------------------------------------------------------------------------
+
+/// Flood-fill label all connected [`Land`] tiles into numbered regions
+/// (1, 2, 3, ...). Water and FarLand tiles keep label 0.
+pub fn label_regions(terrain: &[Vec<Terrain>], map_size: usize) -> Vec<Vec<usize>> {
+    let mut labels = vec![vec![0usize; map_size]; map_size];
     let mut current_label = 1;
 
-    for y in 0..MAP_SIZE {
-        for x in 0..MAP_SIZE {
+    for y in 0..map_size {
+        for x in 0..map_size {
             if terrain[y][x] == Terrain::Land && labels[y][x] == 0 {
-                flood_fill_label(terrain, &mut labels, x, y, current_label);
+                flood_fill(terrain, &mut labels, x, y, current_label, map_size);
                 current_label += 1;
             }
         }
@@ -47,43 +100,43 @@ pub fn label_regions(terrain: &Vec<Vec<Terrain>>) -> Vec<Vec<usize>> {
     labels
 }
 
-fn flood_fill_label(terrain: &Vec<Vec<Terrain>>, labels: &mut Vec<Vec<usize>>, start_x: usize, start_y: usize, label: usize) {
+/// BFS flood-fill starting at `(start_x, start_y)`.
+fn flood_fill(
+    terrain: &[Vec<Terrain>],
+    labels: &mut [Vec<usize>],
+    start_x: usize,
+    start_y: usize,
+    label: usize,
+    map_size: usize,
+) {
     let mut queue = VecDeque::new();
     queue.push_back((start_x, start_y));
     labels[start_y][start_x] = label;
 
     while let Some((x, y)) = queue.pop_front() {
-        for (nx, ny) in neighbors_4(x, y) {
-            if nx < MAP_SIZE && ny < MAP_SIZE {
-                if terrain[ny][nx] == Terrain::Land && labels[ny][nx] == 0 {
-                    labels[ny][nx] = label;
-                    queue.push_back((nx, ny));
-                }
+        for (nx, ny) in neighbors_4(x, y, map_size) {
+            if terrain[ny][nx] == Terrain::Land && labels[ny][nx] == 0 {
+                labels[ny][nx] = label;
+                queue.push_back((nx, ny));
             }
         }
     }
 }
 
-pub fn neighbors_4(x: usize, y: usize) -> Vec<(usize, usize)> {
-    let mut n = Vec::new();
-    if x > 0 {
-        n.push((x - 1, y));
-    }
-    if x + 1 < MAP_SIZE {
-        n.push((x + 1, y));
-    }
-    if y > 0 {
-        n.push((x, y - 1));
-    }
-    if y + 1 < MAP_SIZE {
-        n.push((x, y + 1));
-    }
-    n
-}
+// ---------------------------------------------------------------------------
+// Water region detection
+// ---------------------------------------------------------------------------
 
-pub fn is_large_water_region(terrain: &Vec<Vec<Terrain>>, x: usize, y: usize, min_size: usize) -> bool {
-    let terrain_type = terrain[y][x];
-    if terrain_type != Terrain::Water {
+/// Return `true` if the water body containing `(x, y)` has at least
+/// `min_size` tiles (used to distinguish oceans from puddles).
+pub fn is_large_water_region(
+    terrain: &[Vec<Terrain>],
+    x: usize,
+    y: usize,
+    min_size: usize,
+    map_size: usize,
+) -> bool {
+    if terrain[y][x] != Terrain::Water {
         return false;
     }
 
@@ -93,19 +146,51 @@ pub fn is_large_water_region(terrain: &Vec<Vec<Terrain>>, x: usize, y: usize, mi
 
     while let Some((cx, cy)) = queue.pop_front() {
         if visited.len() >= min_size {
-            break;
+            return true;
         }
         if !visited.insert((cx, cy)) {
             continue;
         }
-        for (nx, ny) in neighbors_4(cx, cy) {
-            if nx < MAP_SIZE && ny < MAP_SIZE {
-                if terrain[ny][nx] == terrain_type && !visited.contains(&(nx, ny)) {
-                    queue.push_back((nx, ny));
-                }
+        for (nx, ny) in neighbors_4(cx, cy, map_size) {
+            if terrain[ny][nx] == Terrain::Water && !visited.contains(&(nx, ny)) {
+                queue.push_back((nx, ny));
             }
         }
     }
 
     visited.len() >= min_size
+}
+
+// ---------------------------------------------------------------------------
+// Neighbor helpers
+// ---------------------------------------------------------------------------
+
+/// Return the 4-connected neighbors of `(x, y)` that lie within a
+/// `map_size x map_size` grid (no heap allocation).
+pub fn neighbors_4(
+    x: usize,
+    y: usize,
+    map_size: usize,
+) -> impl Iterator<Item = (usize, usize)> {
+    let mut buf = [(0usize, 0usize); 4];
+    let mut len = 0;
+
+    if x > 0 {
+        buf[len] = (x - 1, y);
+        len += 1;
+    }
+    if x + 1 < map_size {
+        buf[len] = (x + 1, y);
+        len += 1;
+    }
+    if y > 0 {
+        buf[len] = (x, y - 1);
+        len += 1;
+    }
+    if y + 1 < map_size {
+        buf[len] = (x, y + 1);
+        len += 1;
+    }
+
+    buf.into_iter().take(len)
 }

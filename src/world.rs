@@ -1,0 +1,135 @@
+//! High-level world access.
+//!
+//! [`World`] wraps a [`ChunkedWorldReader`](crate::save::ChunkedWorldReader)
+//! with a chunk cache and lazy island discovery, providing a single entry
+//! point for all game queries against a generated world.
+
+use std::collections::HashMap;
+use std::io;
+
+use crate::config::WorldConfig;
+use crate::island::{self, Island};
+use crate::save::{ChunkData, ChunkedWorldReader};
+
+/// A loaded world with cached chunk data and lazy island discovery.
+///
+/// # Two-phase access pattern
+///
+/// Methods that may perform I/O (`ensure_chunk`, `ensure_islands_computed`)
+/// take `&mut self`. Pure accessors (`chunk`, `islands`, `region_label_at_cached`)
+/// take `&self`. Call the `ensure_*` methods first, then read freely.
+pub struct World {
+    reader: ChunkedWorldReader,
+    chunk_cache: HashMap<(u32, u32), ChunkData>,
+    islands: Option<Vec<Island>>,
+}
+
+impl World {
+    /// Open a world file and read its header.
+    pub fn open(path: &str) -> io::Result<Self> {
+        let reader = ChunkedWorldReader::open(path)?;
+        Ok(Self {
+            reader,
+            chunk_cache: HashMap::new(),
+            islands: None,
+        })
+    }
+
+    // -- Header accessors ---------------------------------------------------
+
+    /// The generation configuration stored in the file header.
+    pub fn config(&self) -> &WorldConfig {
+        &self.reader.header.config
+    }
+
+    /// World width in tiles.
+    pub fn width(&self) -> u32 {
+        self.reader.header.width
+    }
+
+    /// World height in tiles.
+    pub fn height(&self) -> u32 {
+        self.reader.header.height
+    }
+
+    /// Number of chunk columns.
+    pub fn chunks_x(&self) -> u32 {
+        self.reader.header.chunks_x
+    }
+
+    /// Number of chunk rows.
+    pub fn chunks_y(&self) -> u32 {
+        self.reader.header.chunks_y
+    }
+
+    /// All city slot positions from the file header.
+    pub fn city_slots(&self) -> &[(u32, u32)] {
+        &self.reader.header.city_slots
+    }
+
+    // -- Chunk management ---------------------------------------------------
+
+    /// Load a chunk into the cache if it isn't already there.
+    pub fn ensure_chunk(&mut self, cx: u32, cy: u32) -> io::Result<()> {
+        if !self.chunk_cache.contains_key(&(cx, cy)) {
+            let chunk = self.reader.load_chunk(cx, cy)?;
+            self.chunk_cache.insert((cx, cy), chunk);
+        }
+        Ok(())
+    }
+
+    /// Get a reference to a cached chunk.
+    ///
+    /// Returns `None` if the chunk has not been loaded yet - call
+    /// [`ensure_chunk`](Self::ensure_chunk) first.
+    pub fn chunk(&self, cx: u32, cy: u32) -> Option<&ChunkData> {
+        self.chunk_cache.get(&(cx, cy))
+    }
+
+    // -- Island discovery ---------------------------------------------------
+
+    /// Discover all islands (loads every chunk into the cache).
+    ///
+    /// This is a no-op if islands have already been computed.
+    pub fn ensure_islands_computed(&mut self) {
+        if self.islands.is_none() {
+            self.islands = Some(island::discover_islands(
+                &self.reader,
+                &mut self.chunk_cache,
+            ));
+        }
+    }
+
+    /// Return the discovered islands.
+    ///
+    /// Returns an empty slice if [`ensure_islands_computed`](Self::ensure_islands_computed)
+    /// has not been called yet.
+    pub fn islands(&self) -> &[Island] {
+        self.islands.as_deref().unwrap_or(&[])
+    }
+
+    // -- Coordinate helpers -------------------------------------------------
+
+    /// Look up the region label at `(x, y)` from **cached** chunks only.
+    ///
+    /// Returns `0` if the containing chunk is not in the cache.
+    pub fn region_label_at_cached(&self, x: u32, y: u32) -> u32 {
+        let cs = self.reader.header.config.chunk_size;
+        let (cx, cy) = (x / cs, y / cs);
+        self.chunk(cx, cy)
+            .map(|chunk| {
+                let lx = (x - cx * cs) as usize;
+                let ly = (y - cy * cs) as usize;
+                chunk.region_labels[ly * chunk.width as usize + lx]
+            })
+            .unwrap_or(0)
+    }
+
+    /// Look up the region label at `(x, y)`, loading the chunk if needed.
+    pub fn region_label_at(&mut self, x: u32, y: u32) -> u32 {
+        let cs = self.reader.header.config.chunk_size;
+        let (cx, cy) = (x / cs, y / cs);
+        let _ = self.ensure_chunk(cx, cy);
+        self.region_label_at_cached(x, y)
+    }
+}
