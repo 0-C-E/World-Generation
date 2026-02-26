@@ -6,8 +6,8 @@ super-linter.log
 # GitHub Actions leftovers
 github_conf
 
-# Generated images
-chunks/
+# Generated world saves
+*.world
 
 # Environments
 .env
