@@ -81,20 +81,20 @@ The file uses a custom binary format (magic bytes: `WGCH`). All values are **lit
 ```
 +---------------------------------------------+
 |  Header                                     |
-|  +- Magic: "WGCH" (4 bytes)                |
-|  +- Version: 2 (u32)                       |
+|  +- Magic: "WGCH" (4 bytes)                 |
+|  +- Version: 2 (u32)                        |
 |  +- Config block (generation parameters)    |
-|  +- Width, Height, ChunkSize (u32 each)    |
-|  +- ChunksX, ChunksY (u32 each)           |
-|  +- NumCities (u32)                        |
-|  +- City slots: [(x: u32, y: u32); N]     |
+|  +- Width, Height, ChunkSize (u32 each)     |
+|  +- ChunksX, ChunksY (u32 each)             |
+|  +- NumCities (u32)                         |
+|  +- City slots: [(x: u32, y: u32); N]       |
 +---------------------------------------------+
 |  Chunk Index (one entry per chunk)          |
-|  +- [offset: u64, comp_len: u32,           |
-|      uncomp_len: u32] x (ChunksXxChunksY)  |
+|  +- [offset: u64, comp_len: u32,            |
+|      uncomp_len: u32] x (ChunksXxChunksY)   |
 +---------------------------------------------+
 |  Chunk Data (Deflate-compressed blocks)     |
-|  +- Per pixel: terrain (u8)                |
+|  +- Per pixel: terrain (u8)                 |
 |                elevation (f32)              |
 |                region_label (u32)           |
 |     = 9 bytes per pixel, compressed         |
