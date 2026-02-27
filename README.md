@@ -1,10 +1,10 @@
 # World Generator
 
-A procedural world generator written in Rust, designed as the foundation for a **Grepolis-style massively multiplayer online strategy game (MMORTS)**. It creates a 10,000 x 10,000 tile ocean-and-islands map complete with terrain, cities, and island boundaries, then lets you explore it in the browser through a zoomable map viewer.
+A procedural world generator written in Rust, designed as the foundation for **[0 C.E.](https://github.com/0-C-E) - a web-based, open-source ancient world strategy game (MMORTS)**. It creates a 10,000 x 10,000 tile ocean-and-islands map complete with terrain, cities, and island boundaries, then lets you explore it in the browser through a zoomable map viewer.
 
 ## What is this project? (The big picture)
 
-Imagine games like [Grepolis](https://en.wikipedia.org/wiki/Grepolis), [0.A.D.](https://play0ad.com/) or [Tribal Wars](https://www.tribalwars.net/en-dk/) - hundreds of players share a single world map made up of ocean, islands, and cities. Each island has a limited number of city slots that players can colonize, fight over, and develop.
+Imagine games like [Grepolis](https://en.wikipedia.org/wiki/Grepolis), [0 A.D.](https://play0ad.com/), [Tribal Wars](https://www.tribalwars.net/en-dk/), [Age of Empires](https://www.ageofempires.com/), or [Civilization VI](https://civilization.2k.com/) - hundreds of players share a single world map made up of ocean, islands, and cities. Each island has a limited number of city slots that players can colonize, fight over, and develop.
 
 **This project generates that entire game world from scratch.** It doesn't just draw a pretty picture - it produces a structured data file that a game server could use to run an actual online strategy game. Specifically, it:
 
