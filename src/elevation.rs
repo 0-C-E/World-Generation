@@ -21,11 +21,16 @@ pub fn generate(config: &WorldConfig) -> Vec<Vec<f64>> {
     let offset_x = rng.random::<u32>() % 10_000;
     let offset_y = rng.random::<u32>() % 10_000;
 
+    // Widen to f64 once -- the noise function requires f64 precision.
+    let scale = config.scale as f64;
+    let persistence = config.persistence as f64;
+    let lacunarity = config.lacunarity as f64;
+
     let mut elevation = vec![vec![0.0; size]; size];
 
     for y in 0..size {
         for x in 0..size {
-            let mut freq = 1.0 / config.scale;
+            let mut freq = 1.0 / scale;
             let mut amp = 1.0;
             let mut noise_sum = 0.0;
             let mut amp_sum = 0.0;
@@ -35,8 +40,8 @@ pub fn generate(config: &WorldConfig) -> Vec<Vec<f64>> {
                 let ny = (y as f64 + offset_y as f64) * freq;
                 noise_sum += perlin.get([nx, ny]) * amp;
                 amp_sum += amp;
-                amp *= config.persistence;
-                freq *= config.lacunarity;
+                amp *= persistence;
+                freq *= lacunarity;
             }
             elevation[y][x] = (noise_sum / amp_sum + 1.0) / 2.0;
         }

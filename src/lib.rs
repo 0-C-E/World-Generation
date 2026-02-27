@@ -1,4 +1,4 @@
-//! **World Generator** - a procedural map generator for Grepolis-style games.
+//! World Generator -- procedural map generator for Grepolis-style games.
 //!
 //! # Architecture
 //!
@@ -10,7 +10,7 @@
 //! | [`city`] | Coastal city-slot placement |
 //! | [`color`] | Terrain/elevation to RGB mapping for tile rendering |
 //! | [`font`] | Minimal 5x7 bitmap font for debug overlays |
-//! | [`save`] | Chunked, compressed binary file format (v2) |
+//! | [`save`] | Chunked, compressed binary file format (v1) |
 //! | [`island`] | Island discovery and representation |
 //! | [`world`] | High-level [`World`] facade for game / viewer code |
 //! | [`tile`] | Slippy-map tile renderer (256 x 256 PNGs) |

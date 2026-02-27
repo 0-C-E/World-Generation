@@ -1,15 +1,13 @@
 //! City placement.
 //!
-//! Cities are placed on coastal land tiles - tiles that border both land and
-//! ocean. A minimum-spacing grid prevents cities from clustering, and islands
-//! with too few candidates are discarded.
-//!
-//! All tunable thresholds come from [`WorldConfig`](crate::config::WorldConfig).
+//! Cities are placed on coastal land tiles -- tiles that border both land and
+//! ocean. A minimum-spacing grid prevents clustering, and islands with too
+//! few candidates are discarded.
 
 use std::collections::HashMap;
 
 use crate::config::WorldConfig;
-use crate::terrain::{is_large_water_region, Terrain};
+use crate::terrain::{Terrain, WaterBodies};
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -18,13 +16,17 @@ use crate::terrain::{is_large_water_region, Terrain};
 /// Scan the terrain grid for valid coastal city positions.
 ///
 /// A tile qualifies when it is [`Land`](Terrain::Land), lies within the
-/// playable radius, has enough land *and* water neighbours, where at least one
-/// water neighbour belongs to a large body, and is far enough from every
-/// previously accepted slot.
-pub fn find_city_slots(terrain: &[Vec<Terrain>], config: &WorldConfig) -> Vec<(usize, usize)> {
+/// playable radius, has enough land and water neighbours (at least one
+/// touching a large water body), and is far enough from every already-accepted
+/// slot.
+pub fn find_city_slots(
+    terrain: &[Vec<Terrain>],
+    water: &WaterBodies,
+    config: &WorldConfig,
+) -> Vec<(usize, usize)> {
     let map_size = config.map_len();
     let spacing = config.city_spacing as usize;
-    let radius = config.playable_radius;
+    let radius = config.playable_radius as f64;
     let min_land = config.min_land_neighbors as usize;
     let min_water = config.min_water_neighbors as usize;
     let min_body = config.min_water_body_size as usize;
@@ -52,7 +54,7 @@ pub fn find_city_slots(terrain: &[Vec<Terrain>], config: &WorldConfig) -> Vec<(u
                 && !is_area_taken(&taken, x, y, spacing, map_size)
                 && water_positions
                     .iter()
-                    .any(|&(wx, wy)| is_large_water_region(terrain, wx, wy, min_body, map_size))
+                    .any(|&(wx, wy)| water.is_large(wx, wy, min_body))
             {
                 slots.push((x, y));
                 mark_area_taken(&mut taken, x, y, spacing, map_size);

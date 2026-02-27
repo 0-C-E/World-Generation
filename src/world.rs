@@ -114,7 +114,7 @@ impl World {
     ///
     /// Returns `0` if the containing chunk is not in the cache.
     pub fn region_label_at_cached(&self, x: u32, y: u32) -> u32 {
-        let cs = self.reader.header.config.chunk_size;
+        let cs = self.reader.header.config.chunk_size as u32;
         let (cx, cy) = (x / cs, y / cs);
         self.chunk(cx, cy)
             .map(|chunk| {
@@ -127,7 +127,7 @@ impl World {
 
     /// Look up the region label at `(x, y)`, loading the chunk if needed.
     pub fn region_label_at(&mut self, x: u32, y: u32) -> u32 {
-        let cs = self.reader.header.config.chunk_size;
+        let cs = self.reader.header.config.chunk_size as u32;
         let (cx, cy) = (x / cs, y / cs);
         let _ = self.ensure_chunk(cx, cy);
         self.region_label_at_cached(x, y)

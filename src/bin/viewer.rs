@@ -126,27 +126,27 @@ fn handle_request(request: Request, url: &str, state: &mut ServerState) {
         "/" => {
             // Inject the world fingerprint so tile URLs bust the cache on world change.
             let html = HTML.replace("{{WORLD_FINGERPRINT}}", &state.world_fingerprint);
-            respond_owned(request, "text/html; charset=utf-8", html);
+            respond(request, "text/html; charset=utf-8", html);
         }
-        "/style.css" => respond_text(request, "text/css", CSS),
+        "/style.css" => respond(request, "text/css", CSS),
         "/viewer.js" => {
             let js = inject_config(JS, &state);
-            respond_owned(request, "application/javascript", js);
+            respond(request, "application/javascript", js);
         }
         "/debug" => {
             let html = DEBUG_HTML.replace("{{WORLD_FINGERPRINT}}", &state.world_fingerprint);
-            respond_owned(request, "text/html; charset=utf-8", html);
+            respond(request, "text/html; charset=utf-8", html);
         }
-        "/debug.css" => respond_text(request, "text/css", DEBUG_CSS),
+        "/debug.css" => respond(request, "text/css", DEBUG_CSS),
         "/debug.js" => {
             let js = inject_config(DEBUG_JS, &state);
-            respond_owned(request, "application/javascript", js);
+            respond(request, "application/javascript", js);
         }
-        "/status" => respond_text(request, "application/json", r#"{"ready":true}"#),
-        "/city-icon.svg" => respond_text(request, "image/svg+xml", CITY_ICON_SVG),
+        "/status" => respond(request, "application/json", r#"{"ready":true}"#),
+        "/city-icon.svg" => respond(request, "image/svg+xml", CITY_ICON_SVG),
         "/cities.json" => {
             state.ensure_cities_json();
-            respond_text(
+            respond(
                 request,
                 "application/json",
                 state.cities_json.as_deref().unwrap(),
@@ -155,7 +155,7 @@ fn handle_request(request: Request, url: &str, state: &mut ServerState) {
 
         "/islands.json" => {
             state.ensure_islands_json();
-            respond_text(
+            respond(
                 request,
                 "application/json",
                 state.islands_json.as_deref().unwrap(),
@@ -270,7 +270,7 @@ fn handle_outline(request: Request, url: &str, state: &mut ServerState) {
         .map(String::as_str)
         .unwrap_or("[]");
 
-    respond_text(request, "application/json", json);
+    respond(request, "application/json", json);
 }
 
 // ---------------------------------------------------------------------------
@@ -280,7 +280,7 @@ fn handle_outline(request: Request, url: &str, state: &mut ServerState) {
 /// Build the JSON array for `/cities.json`: `[[x, y, region_label], ...]`.
 fn build_cities_json(world: &mut World) -> String {
     let city_slots = world.city_slots().to_vec();
-    let cs = world.config().chunk_size;
+    let cs = world.config().chunk_size as u32;
 
     // Group cities by their containing chunk.
     let mut by_chunk: HashMap<(u32, u32), Vec<(u32, u32)>> = HashMap::new();
@@ -419,27 +419,21 @@ fn build_island_outlines(world: &mut World) -> HashMap<u32, String> {
 // Config injection into JS templates
 // ---------------------------------------------------------------------------
 
-/// Replace `{{MAP_SIZE}}`, `{{TILE_SIZE}}`, and `{{MAX_ZOOM}}` placeholders
+/// Replace `{{ MAP_SIZE }}`, `{{ TILE_SIZE }}`, and `{{ MAX_ZOOM }}` placeholders
 /// in a JS template string with the actual world values.
 fn inject_config(template: &str, state: &ServerState) -> String {
     let cfg = state.world.config();
     template
-        .replace("{{MAP_SIZE}}", &cfg.map_size.to_string())
-        .replace("{{TILE_SIZE}}", &TILE_SIZE.to_string())
-        .replace("{{MAX_ZOOM}}", &cfg.max_zoom().to_string())
+        .replace("{{ MAP_SIZE }}", &cfg.map_size.to_string())
+        .replace("{{ TILE_SIZE }}", &TILE_SIZE.to_string())
+        .replace("{{ MAX_ZOOM }}", &cfg.max_zoom().to_string())
 }
 
 // ---------------------------------------------------------------------------
 // Response helper
 // ---------------------------------------------------------------------------
 
-fn respond_text(request: Request, content_type: &str, body: &str) {
-    let header = Header::from_bytes("Content-Type", content_type).unwrap();
-    let response = Response::from_string(body).with_header(header);
-    let _ = request.respond(response);
-}
-
-fn respond_owned(request: Request, content_type: &str, body: String) {
+fn respond(request: Request, content_type: &str, body: impl Into<String>) {
     let header = Header::from_bytes("Content-Type", content_type).unwrap();
     let response = Response::from_string(body).with_header(header);
     let _ = request.respond(response);

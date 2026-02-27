@@ -82,26 +82,26 @@ The file uses a custom binary format (magic bytes: `WGCH`). All values are **lit
 +---------------------------------------------+
 |  Header                                     |
 |  +- Magic: "WGCH" (4 bytes)                 |
-|  +- Version: 1 (u32)                        |
+|  +- Version: 1 (u8)                         |
 |  +- Config block (generation parameters)    |
-|  +- Width, Height, ChunkSize (u32 each)     |
-|  +- ChunksX, ChunksY (u32 each)             |
+|  +- Width, Height, ChunkSize (u16 each)     |
+|  +- ChunksX, ChunksY (u16 each)             |
 |  +- NumCities (u32)                         |
-|  +- City slots: [(x: u32, y: u32); N]       |
+|  +- City slots: [(x: u16, y: u16); N]       |
 +---------------------------------------------+
 |  Chunk Index (one entry per chunk)          |
 |  +- [offset: u64, comp_len: u32,            |
-|      uncomp_len: u32] x (ChunksXxChunksY)   |
+|      uncomp_len: u32] x (ChunksX*ChunksY)   |
 +---------------------------------------------+
 |  Chunk Data (Deflate-compressed blocks)     |
-|  +- Per pixel: terrain (u8)                 |
-|                elevation (f32)              |
-|                region_label (u32)           |
-|     = 9 bytes per pixel, compressed         |
+|  +- Per tile: terrain (u8)                  |
+|               elevation (u16)               |
+|               region_label (u16)            |
+|     = 5 bytes per tile, compressed          |
 +---------------------------------------------+
 ```
 
-The config block stores: `map_size`, `scale`, `octaves`, `persistence`, `lacunarity`, `seed`, `water_threshold`, `city_spacing`, `min_city_slots_per_island`, `playable_radius`, and `farland_margin`.
+The config block stores all [`WorldConfig`](src/config.rs) parameters: `map_size` (u16), `scale` (f32), `octaves` (u8), `persistence` (f32), `lacunarity` (f32), `seed` (u32), `water_threshold` (f32), `city_spacing` (u8), `min_city_slots_per_island` (u8), `playable_radius` (u16), `farland_margin` (u16), `min_water_body_size` (u16), `min_land_neighbors` (u8), `min_water_neighbors` (u8).
 
 ## Requirements
 

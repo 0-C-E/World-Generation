@@ -3,9 +3,9 @@
 //! Produces 256 x 256 PNG tiles from chunk data, compatible with Leaflet
 //! slippy-map tile URLs (`/tile/{z}/{x}/{y}.png`).
 //!
-//! Uses a **two-phase** approach that is borrow-checker friendly:
+//! Uses a two-phase approach that is borrow-checker friendly:
 //! 1. `ensure_chunk` (mutable) for every chunk the tile overlaps.
-//! 2. Sample pixels via `chunk` (shared reference) - no further I/O.
+//! 2. Sample pixels via `chunk` (shared ref) -- no further I/O.
 
 use crate::color::get_color;
 use crate::font::draw_text;
@@ -55,7 +55,7 @@ fn render_base(world: &mut World, z: u32, tx: u32, ty: u32) -> Option<(Vec<u8>, 
     // Copy scalars so we don't borrow `world` across the mutable chunk-loading phase.
     let width = world.width();
     let height = world.height();
-    let chunk_size = world.config().chunk_size;
+    let chunk_size = world.config().chunk_size as u32;
     let water_threshold = world.config().water_threshold;
     let chunks_x = world.chunks_x();
     let chunks_y = world.chunks_y();

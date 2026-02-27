@@ -4,9 +4,6 @@
 //! [`Land`], or [`FarLand`] (decorative terrain beyond the playable area).
 //! Connected land tiles are then grouped into numbered regions via flood-fill
 //! so that each island gets a unique label.
-//!
-//! **All functions are parameterized** - nothing reads global constants. Pass
-//! the values from [`WorldConfig`](crate::config::WorldConfig).
 
 use std::collections::VecDeque;
 
@@ -25,14 +22,14 @@ pub enum Terrain {
 }
 
 impl Terrain {
-    /// Convert to the `u8` discriminant used in the binary format.
+    /// Convert to the `u8` stored in the binary format.
     pub fn to_u8(self) -> u8 {
         self as u8
     }
 
-    /// Convert from a raw `u8` (as stored in chunk data) back to a variant.
+    /// Convert from a `u8` read from chunk data.
     ///
-    /// Unknown values default to [`Water`](Terrain::Water).
+    /// Unknown values fall back to [`Water`](Terrain::Water).
     pub fn from_u8(v: u8) -> Self {
         match v {
             1 => Terrain::Land,
@@ -54,11 +51,12 @@ impl Terrain {
 pub fn classify_terrain(
     elevation: &[Vec<f64>],
     map_size: usize,
-    water_threshold: f64,
-    playable_radius: f64,
-    farland_margin: f64,
+    water_threshold: f32,
+    playable_radius: u16,
+    farland_margin: u16,
 ) -> Vec<Vec<Terrain>> {
-    let farland_radius = playable_radius + farland_margin;
+    let water_threshold = water_threshold as f64;
+    let farland_radius = playable_radius as f64 + farland_margin as f64;
     let mut terrain = vec![vec![Terrain::Land; map_size]; map_size];
     let center = map_size / 2;
 
@@ -126,49 +124,83 @@ fn flood_fill(
 }
 
 // ---------------------------------------------------------------------------
-// Water region detection
+// Water body labeling
 // ---------------------------------------------------------------------------
 
-/// Return `true` if the water body containing `(x, y)` has at least
-/// `min_size` tiles (used to distinguish oceans from puddles).
-pub fn is_large_water_region(
-    terrain: &[Vec<Terrain>],
-    x: usize,
-    y: usize,
-    min_size: usize,
-    map_size: usize,
-) -> bool {
-    if terrain[y][x] != Terrain::Water {
-        return false;
+/// Pre-computed water body labels and their sizes.
+///
+/// Built once by [`label_water_bodies`] so that city placement can check
+/// whether a water tile belongs to a large body in O(1) instead of
+/// re-flooding the ocean for every candidate.
+pub struct WaterBodies {
+    /// Per-tile label (0 = not water, 1.. = water body id).
+    pub labels: Vec<Vec<u32>>,
+    /// Size of each body, indexed by label. Index 0 is unused.
+    pub sizes: Vec<usize>,
+}
+
+impl WaterBodies {
+    /// Check whether the water body at `(x, y)` has at least `min_size` tiles.
+    pub fn is_large(&self, x: usize, y: usize, min_size: usize) -> bool {
+        let label = self.labels[y][x] as usize;
+        label > 0 && self.sizes[label] >= min_size
+    }
+}
+
+/// Flood-fill label all connected [`Water`](Terrain::Water) tiles into
+/// numbered bodies (1, 2, 3, ...) and record each body's tile count.
+///
+/// Runs once over the full map. Non-water tiles get label 0.
+pub fn label_water_bodies(terrain: &[Vec<Terrain>], map_size: usize) -> WaterBodies {
+    let mut labels = vec![vec![0u32; map_size]; map_size];
+    let mut sizes = vec![0usize]; // index 0 unused
+    let mut current_label = 1u32;
+
+    for y in 0..map_size {
+        for x in 0..map_size {
+            if terrain[y][x] == Terrain::Water && labels[y][x] == 0 {
+                let size = flood_fill_water(terrain, &mut labels, x, y, current_label, map_size);
+                sizes.push(size);
+                current_label += 1;
+            }
+        }
     }
 
-    let mut visited = std::collections::HashSet::new();
-    let mut queue = VecDeque::new();
-    queue.push_back((x, y));
+    WaterBodies { labels, sizes }
+}
 
-    while let Some((cx, cy)) = queue.pop_front() {
-        if visited.len() >= min_size {
-            return true;
-        }
-        if !visited.insert((cx, cy)) {
-            continue;
-        }
-        for (nx, ny) in neighbors_4(cx, cy, map_size) {
-            if terrain[ny][nx] == Terrain::Water && !visited.contains(&(nx, ny)) {
+/// BFS flood-fill for water, returns the number of tiles filled.
+fn flood_fill_water(
+    terrain: &[Vec<Terrain>],
+    labels: &mut [Vec<u32>],
+    start_x: usize,
+    start_y: usize,
+    label: u32,
+    map_size: usize,
+) -> usize {
+    let mut queue = VecDeque::new();
+    queue.push_back((start_x, start_y));
+    labels[start_y][start_x] = label;
+    let mut count = 0;
+
+    while let Some((x, y)) = queue.pop_front() {
+        count += 1;
+        for (nx, ny) in neighbors_4(x, y, map_size) {
+            if terrain[ny][nx] == Terrain::Water && labels[ny][nx] == 0 {
+                labels[ny][nx] = label;
                 queue.push_back((nx, ny));
             }
         }
     }
 
-    visited.len() >= min_size
+    count
 }
 
 // ---------------------------------------------------------------------------
 // Neighbor helpers
 // ---------------------------------------------------------------------------
 
-/// Return the 4-connected neighbors of `(x, y)` that lie within a
-/// `map_size x map_size` grid (no heap allocation).
+/// 4-connected neighbors of `(x, y)` inside a `map_size x map_size` grid.
 pub fn neighbors_4(
     x: usize,
     y: usize,

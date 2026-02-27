@@ -53,8 +53,12 @@ fn main() {
         terrain::label_regions(&terrain_grid, config.map_len())
     });
 
+    let water_bodies = timed("Water bodies", || {
+        terrain::label_water_bodies(&terrain_grid, config.map_len())
+    });
+
     let city_slots = timed("City slots", || {
-        city::find_city_slots(&terrain_grid, &config)
+        city::find_city_slots(&terrain_grid, &water_bodies, &config)
     });
     println!("  Found {} candidate city slots", city_slots.len());
 

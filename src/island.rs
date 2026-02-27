@@ -1,6 +1,6 @@
 //! Island discovery and representation.
 //!
-//! An **island** is a connected region of [`Land`](crate::terrain::Terrain::Land)
+//! An island is a connected region of [`Land`](crate::terrain::Terrain::Land)
 //! tiles that contains at least one city. This module provides the [`Island`]
 //! type and a discovery function that scans chunk data to build the island
 //! registry.
@@ -59,14 +59,14 @@ pub struct Island {
 
 /// Scan city slots and chunk data to build the island registry.
 ///
-/// Loads **all** chunks to compute accurate bounding boxes. The chunks remain
-/// in `chunk_cache` afterward so later tile/outline requests are free.
+/// Loads all chunks to compute accurate bounding boxes. The chunks remain
+/// in `chunk_cache` afterward so later tile requests are free.
 pub fn discover_islands(
     reader: &ChunkedWorldReader,
     chunk_cache: &mut HashMap<(u32, u32), ChunkData>,
 ) -> Vec<Island> {
     let h = &reader.header;
-    let cs = h.config.chunk_size;
+    let cs = h.config.chunk_size as u32;
 
     // Step 1: accumulate per-region city stats (sum_x, sum_y, count).
     let mut stats: HashMap<u32, (u64, u64, u32)> = HashMap::new();

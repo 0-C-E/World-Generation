@@ -1,23 +1,19 @@
-//! Elevation-to-colour mapping for the map tile renderer.
+//! Elevation-to-colour mapping for the tile renderer.
 //!
-//! Each tile is coloured according to its [`Terrain`] type and elevation,
-//! producing a gradient that transitions from deep ocean blues through sandy
-//! beaches and forests up to snowy mountain peaks.
+//! Each tile is coloured by [`Terrain`] type and elevation: deep ocean blues
+//! through sandy beaches and forests up to snowy mountain peaks.
 
 use crate::terrain::Terrain;
 
 /// Map a terrain type and elevation to an RGB colour triple.
 ///
-/// | Terrain | Visual range |
-/// |---------|-------------|
-/// | [`Water`](Terrain::Water) | Deep blue to lighter cyan |
-/// | [`Land`](Terrain::Land) | Beach sand to forest to grassland to snow |
-/// | [`FarLand`](Terrain::FarLand) | Washed-out beige beyond the playable area |
+/// * [`Water`](Terrain::Water) -- deep blue to lighter cyan
+/// * [`Land`](Terrain::Land) -- beach sand to forest to grassland to snow
+/// * [`FarLand`](Terrain::FarLand) -- washed-out beige beyond the playable area
 ///
-/// `elevation` is expected in `[0.0, 1.0]`.
-/// `water_threshold` is the water/land boundary (typically `0.55`).
-pub fn get_color(terrain: Terrain, elevation: f32, water_threshold: f64) -> [u8; 3] {
-    let e = elevation as f64;
+/// `elevation` is in `[0.0, 1.0]`.
+pub fn get_color(terrain: Terrain, elevation: f32, water_threshold: f32) -> [u8; 3] {
+    let e = elevation;
 
     match terrain {
         // -- Water: deep blue -> lighter cyan --------------------------------
