@@ -51,7 +51,8 @@ var islandLayer = L.layerGroup();
 var cityLayer = L.layerGroup();
 var highlightLayer = L.layerGroup().addTo(map);
 var allIslands = null;  // loaded eagerly at startup
-var allCities = null;   // lazy-loaded on first zoom to 7
+var allCities = null;   // lazy-loaded on first zoom to high zoom level
+var loadingCities = false; // prevents duplicate in-flight fetches
 var outlineCache = {};  // rid -> [[x,y], ...] polygon points
 var worldReady = false; // tracks whether the server has loaded the world
 
@@ -153,10 +154,10 @@ function updateIslandView() {
     }
 }
 
-// Lazy-load individual cities on first zoom to max level
+// Lazy-load individual cities on first zoom to high zoom level
 function loadCities() {
-    if (allCities) return;
-    allCities = []; // mark as loading to prevent double-fetch
+    if (allCities !== null || loadingCities) return;
+    loadingCities = true;
     document.getElementById('loading').style.display = '';
     document.getElementById('loading').textContent = 'Loading cities...';
 
@@ -164,6 +165,7 @@ function loadCities() {
         .then(function (resp) { return resp.json(); })
         .then(function (cities) {
             allCities = cities;
+            loadingCities = false;
             document.getElementById('loading').style.display = 'none';
             if (map.getZoom() >= CITY_ZOOM_THRESHOLD) {
                 updateCityView();
@@ -171,7 +173,8 @@ function loadCities() {
         })
         .catch(function () {
             document.getElementById('loading').textContent = 'Failed to load cities';
-            allCities = null;
+            loadingCities = false;
+            // allCities remains null, allowing a retry on the next trigger
         });
 }
 
@@ -211,16 +214,16 @@ map.on('zoomend', function () {
     highlightLayer.clearLayers();
     var z = map.getZoom();
     if (z >= CITY_ZOOM_THRESHOLD) {
-        // Zoom 7: individual cities
+        // High zoom: individual cities
         if (map.hasLayer(islandLayer)) map.removeLayer(islandLayer);
         if (!allCities || allCities.length === 0) loadCities();
         else updateCityView();
     } else if (z >= ISLAND_ZOOM_MIN) {
-        // Zoom 5-6: island summaries
+        // Mid zoom: island summaries
         if (map.hasLayer(cityLayer)) map.removeLayer(cityLayer);
         updateIslandView();
     } else {
-        // Zoom 0-4: clean map
+        // Low zoom: clean map
         if (map.hasLayer(cityLayer)) map.removeLayer(cityLayer);
         if (map.hasLayer(islandLayer)) map.removeLayer(islandLayer);
     }
