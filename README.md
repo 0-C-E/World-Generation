@@ -76,7 +76,7 @@ The browser frontend uses Leaflet.js (a popular interactive map library) to disp
 
 ## The `.world` binary file format
 
-The file uses a custom binary format (magic bytes: `WGCH`, version 2). All values are **little-endian**.
+The file uses a custom binary format (magic bytes: `WGCH`). All values are **little-endian**.
 
 ```
 +---------------------------------------------+
