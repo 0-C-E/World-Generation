@@ -82,7 +82,7 @@ The file uses a custom binary format (magic bytes: `WGCH`). All values are **lit
 +---------------------------------------------+
 |  Header                                     |
 |  +- Magic: "WGCH" (4 bytes)                 |
-|  +- Version: 2 (u32)                        |
+|  +- Version: 1 (u32)                        |
 |  +- Config block (generation parameters)    |
 |  +- Width, Height, ChunkSize (u32 each)     |
 |  +- ChunksX, ChunksY (u32 each)             |

@@ -1,4 +1,4 @@
-//! World file I/O - chunked binary format v2.
+//! World file I/O - chunked binary format v1.
 //!
 //! The file stores the world as independently-compressed chunks so that the
 //! viewer can load tiles on demand. The header records all
@@ -20,7 +20,7 @@ use crate::terrain::Terrain;
 // ---------------------------------------------------------------------------
 
 const MAGIC: &[u8; 4] = b"WGCH";
-const FORMAT_VERSION: u32 = 2;
+const FORMAT_VERSION: u32 = 1;
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -202,7 +202,7 @@ pub fn save_world_chunked(path: &str, data: &WorldData) -> io::Result<()> {
 
 /// Read just the seed from an existing world file without loading the full index.
 ///
-/// Returns `None` if the file does not exist or is not a valid WGCH v2 file.
+/// Returns `None` if the file does not exist or is not a valid WGCH v1 file.
 pub fn read_seed_from_file(path: &str) -> Option<u32> {
     let mut f = BufReader::new(File::open(path).ok()?);
 
@@ -245,7 +245,7 @@ impl ChunkedWorldReader {
             ));
         }
 
-        // Config (reads the v2 parameter block)
+        // Config (reads the v1 parameter block)
         let mut config = read_config(&mut f)?;
         let width = read_u32(&mut f)?;
         let height = read_u32(&mut f)?;
@@ -340,10 +340,10 @@ impl ChunkedWorldReader {
 }
 
 // ---------------------------------------------------------------------------
-// Config serialization (backward-compatible with v2)
+// Config serialization (v1)
 // ---------------------------------------------------------------------------
 
-/// Write the generation parameters in the field order established by v2.
+/// Write all generation parameters.
 fn write_config(w: &mut impl Write, c: &WorldConfig) -> io::Result<()> {
     write_u32(w, c.map_size)?;
     write_f64(w, c.scale)?;
@@ -356,10 +356,13 @@ fn write_config(w: &mut impl Write, c: &WorldConfig) -> io::Result<()> {
     write_u32(w, c.min_city_slots_per_island)?;
     write_f64(w, c.playable_radius)?;
     write_f64(w, c.farland_margin)?;
+    write_u32(w, c.min_water_body_size)?;
+    write_u32(w, c.min_land_neighbors)?;
+    write_u32(w, c.min_water_neighbors)?;
     Ok(())
 }
 
-/// Read the v2 parameter block and fill defaults for fields added later.
+/// Read all generation parameters.
 fn read_config(r: &mut impl Read) -> io::Result<WorldConfig> {
     let map_size = read_u32(r)?;
     let scale = read_f64(r)?;
@@ -371,7 +374,10 @@ fn read_config(r: &mut impl Read) -> io::Result<WorldConfig> {
     let city_spacing = read_u32(r)?;
     let min_city_slots_per_island = read_u32(r)?;
     let playable_radius = read_f64(r)?;
-    let farland_margin = read_f64(r).unwrap_or(playable_radius * 0.1);
+    let farland_margin = read_f64(r)?;
+    let min_water_body_size = read_u32(r)?;
+    let min_land_neighbors = read_u32(r)?;
+    let min_water_neighbors = read_u32(r)?;
 
     Ok(WorldConfig {
         map_size,
@@ -386,10 +392,9 @@ fn read_config(r: &mut impl Read) -> io::Result<WorldConfig> {
         farland_margin,
         city_spacing,
         min_city_slots_per_island,
-        // Fields not present in v2 - use defaults.
-        min_water_body_size: 500,
-        min_land_neighbors: 2,
-        min_water_neighbors: 2,
+        min_water_body_size,
+        min_land_neighbors,
+        min_water_neighbors,
     })
 }
 
