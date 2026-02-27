@@ -1,13 +1,14 @@
 //! Interactive map viewer - serves tiles and overlays over HTTP.
 //!
 //! Start with `cargo run --bin viewer [path]` and open `http://localhost:8080`.
+//! Configuration is read from environment variables (and `.env` in dev).
 
 use std::collections::HashMap;
 
 use tiny_http::{Header, Request, Response, Server};
 
 use world_generator::island::Island;
-use world_generator::tile::{render_tile, render_debug_tile};
+use world_generator::tile::{render_tile, render_debug_tile, TILE_SIZE};
 use world_generator::World;
 
 // ---------------------------------------------------------------------------
@@ -61,6 +62,9 @@ impl ServerState {
 // ---------------------------------------------------------------------------
 
 fn main() {
+    // Load .env file if present (silently ignored if missing).
+    let _ = dotenvy::dotenv();
+
     let path = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "world.world".into());
@@ -101,8 +105,8 @@ fn main() {
     state.ensure_cities_json();
     eprintln!("Ready.");
 
-    let addr = "0.0.0.0:8080";
-    let server = Server::http(addr).expect("Failed to bind");
+    let addr = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0:8080".into());
+    let server = Server::http(&addr).expect("Failed to bind");
     eprintln!("Viewer running at http://{addr}");
 
     for request in server.incoming_requests() {
@@ -125,13 +129,19 @@ fn handle_request(request: Request, url: &str, state: &mut ServerState) {
             respond_owned(request, "text/html; charset=utf-8", html);
         }
         "/style.css" => respond_text(request, "text/css", CSS),
-        "/viewer.js" => respond_text(request, "application/javascript", JS),
+        "/viewer.js" => {
+            let js = inject_config(JS, &state);
+            respond_owned(request, "application/javascript", js);
+        }
         "/debug" => {
             let html = DEBUG_HTML.replace("{{WORLD_FINGERPRINT}}", &state.world_fingerprint);
             respond_owned(request, "text/html; charset=utf-8", html);
         }
         "/debug.css" => respond_text(request, "text/css", DEBUG_CSS),
-        "/debug.js" => respond_text(request, "application/javascript", DEBUG_JS),
+        "/debug.js" => {
+            let js = inject_config(DEBUG_JS, &state);
+            respond_owned(request, "application/javascript", js);
+        }
         "/status" => respond_text(request, "application/json", r#"{"ready":true}"#),
         "/city-icon.svg" => respond_text(request, "image/svg+xml", CITY_ICON_SVG),
         "/cities.json" => {
@@ -403,6 +413,20 @@ fn build_island_outlines(world: &mut World) -> HashMap<u32, String> {
 
     eprintln!("Built outlines for {} islands", outlines.len());
     outlines
+}
+
+// ---------------------------------------------------------------------------
+// Config injection into JS templates
+// ---------------------------------------------------------------------------
+
+/// Replace `{{MAP_SIZE}}`, `{{TILE_SIZE}}`, and `{{MAX_ZOOM}}` placeholders
+/// in a JS template string with the actual world values.
+fn inject_config(template: &str, state: &ServerState) -> String {
+    let cfg = state.world.config();
+    template
+        .replace("{{MAP_SIZE}}", &cfg.map_size.to_string())
+        .replace("{{TILE_SIZE}}", &TILE_SIZE.to_string())
+        .replace("{{MAX_ZOOM}}", &cfg.max_zoom().to_string())
 }
 
 // ---------------------------------------------------------------------------

@@ -1,8 +1,9 @@
 //! World generation CLI.
 //!
-//! Generates a complete world file using [`WorldConfig::default()`] parameters
-//! and saves it in the chunked binary format. If a world file with the same
-//! seed already exists, generation is skipped.
+//! Generates a complete world file using environment-driven
+//! [`WorldConfig`] parameters and saves it in the chunked binary format.
+//! Configuration is read from environment variables (and `.env` in dev).
+//! If a world file with the same seed already exists, generation is skipped.
 
 use std::time::Instant;
 
@@ -12,7 +13,10 @@ use world_generator::{city, elevation, save, terrain};
 const OUTPUT_PATH: &str = "world.world";
 
 fn main() {
-    let config = WorldConfig::default();
+    // Load .env file if present (silently ignored if missing).
+    let _ = dotenvy::dotenv();
+
+    let config = WorldConfig::from_env();
 
     // Skip generation if the existing file was created with the same seed.
     if let Some(existing_seed) = save::read_seed_from_file(OUTPUT_PATH) {
@@ -41,6 +45,7 @@ fn main() {
             config.map_len(),
             config.water_threshold,
             config.playable_radius,
+            config.farland_margin,
         )
     });
 

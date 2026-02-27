@@ -1,6 +1,6 @@
-var MAP_SIZE = 10000;
-var TILE_SIZE = 256;
-var MAX_ZOOM = 8;
+var MAP_SIZE = {{ MAP_SIZE }};
+var TILE_SIZE = {{ TILE_SIZE }};
+var MAX_ZOOM = {{ MAX_ZOOM }};
 var factor = TILE_SIZE / MAP_SIZE;
 var WORLD_FP = document.body.getAttribute('data-world-fingerprint') || '0';
 var SESSION = Math.floor(Date.now() / 900000);

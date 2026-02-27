@@ -355,6 +355,7 @@ fn write_config(w: &mut impl Write, c: &WorldConfig) -> io::Result<()> {
     write_u32(w, c.city_spacing)?;
     write_u32(w, c.min_city_slots_per_island)?;
     write_f64(w, c.playable_radius)?;
+    write_f64(w, c.farland_margin)?;
     Ok(())
 }
 
@@ -370,6 +371,7 @@ fn read_config(r: &mut impl Read) -> io::Result<WorldConfig> {
     let city_spacing = read_u32(r)?;
     let min_city_slots_per_island = read_u32(r)?;
     let playable_radius = read_f64(r)?;
+    let farland_margin = read_f64(r).unwrap_or(playable_radius * 0.1);
 
     Ok(WorldConfig {
         map_size,
@@ -381,6 +383,7 @@ fn read_config(r: &mut impl Read) -> io::Result<WorldConfig> {
         lacunarity,
         water_threshold,
         playable_radius,
+        farland_margin,
         city_spacing,
         min_city_slots_per_island,
         // Fields not present in v2 - use defaults.

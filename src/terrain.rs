@@ -49,14 +49,16 @@ impl Terrain {
 /// Assign a [`Terrain`] category to every tile.
 ///
 /// * Elevation below `water_threshold` -> [`Water`](Terrain::Water)
-/// * Distance from center > `playable_radius * 1.1` -> [`FarLand`](Terrain::FarLand)
+/// * Distance from center > `playable_radius + farland_margin` -> [`FarLand`](Terrain::FarLand)
 /// * Everything else -> [`Land`](Terrain::Land)
 pub fn classify_terrain(
     elevation: &[Vec<f64>],
     map_size: usize,
     water_threshold: f64,
     playable_radius: f64,
+    farland_margin: f64,
 ) -> Vec<Vec<Terrain>> {
+    let farland_radius = playable_radius + farland_margin;
     let mut terrain = vec![vec![Terrain::Land; map_size]; map_size];
     let center = map_size / 2;
 
@@ -68,7 +70,7 @@ pub fn classify_terrain(
 
             terrain[y][x] = if elevation[y][x] < water_threshold {
                 Terrain::Water
-            } else if dist > playable_radius * 1.1 {
+            } else if dist > farland_radius {
                 Terrain::FarLand
             } else {
                 Terrain::Land

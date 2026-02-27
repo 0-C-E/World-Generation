@@ -14,8 +14,6 @@ use crate::world::World;
 
 /// Side length of a tile image in pixels.
 pub const TILE_SIZE: u32 = 256;
-/// Maximum supported zoom level.
-pub const MAX_ZOOM: u32 = 8;
 
 /// The world-coordinate region a single tile covers.
 struct TileRegion {
@@ -49,7 +47,8 @@ pub fn render_debug_tile(world: &mut World, z: u32, tx: u32, ty: u32) -> Option<
 /// from the world's chunks.
 fn render_base(world: &mut World, z: u32, tx: u32, ty: u32) -> Option<(Vec<u8>, TileRegion)> {
     let tiles_per_axis = 1u32 << z;
-    if tx >= tiles_per_axis || ty >= tiles_per_axis || z > MAX_ZOOM {
+    let max_zoom = world.config().max_zoom();
+    if tx >= tiles_per_axis || ty >= tiles_per_axis || z > max_zoom {
         return None;
     }
 

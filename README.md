@@ -1,6 +1,6 @@
 # World Generator
 
-A procedural world generator written in Rust, designed as the foundation for a **Grepolis-style massively multiplayer online strategy game (MMORTS)**. It creates a 10'000 x 10'000 tile ocean-and-islands map complete with terrain, cities, and island boundaries, then lets you explore it in the browser through a zoomable map viewer.
+A procedural world generator written in Rust, designed as the foundation for a **Grepolis-style massively multiplayer online strategy game (MMORTS)**. It creates a 10,000 x 10,000 tile ocean-and-islands map complete with terrain, cities, and island boundaries, then lets you explore it in the browser through a zoomable map viewer.
 
 ## What is this project? (The big picture)
 
@@ -30,7 +30,7 @@ Perlin noise -> Elevation grid -> Terrain classification -> Region labeling -> C
 
 We use **Perlin noise** - a smooth random function that produces natural-looking hills and valleys. By layering multiple "octaves" of noise at different scales (a technique called **fractal Brownian motion / fBm**), we get large continents with fine coastal detail.
 
-The result is a 10'000 x 10'000 grid of floating-point heights, normalized to `[0.0, 1.0]`.
+The result is a 10,000 x 10,000 grid of floating-point heights, normalized to `[0.0, 1.0]`.
 
 ### Step 2: Terrain classification
 
@@ -40,7 +40,7 @@ Each tile is assigned one of three types based on its height and distance from t
 |------|------|---------|
 | **Water** | Elevation below 0.55 | Ocean and lakes |
 | **Land** | Elevation >= 0.55 and within the playable radius | Colonizable terrain |
-| **FarLand** | Beyond 110% of the playable radius | Decorative border, not part of gameplay |
+| **FarLand** | Beyond the playable radius + farland margin | Decorative border, not part of gameplay |
 
 ### Step 3: Region labeling (island detection)
 
@@ -60,7 +60,7 @@ Then we discard islands that ended up with too few city slots (fewer than 6 by d
 ### Step 5: Saving to disk
 
 Everything is written to a single `.world` binary file in a custom **chunked format**:
-- The map is divided into 256 x 256-tile chunks (40 x 40 = 1'600 chunks for a 10k map)
+- The map is divided into 256 x 256-tile chunks (40 x 40 = 1,600 chunks for a 10k map)
 - Each chunk is independently Deflate-compressed
 - A **chunk index** at the start of the file maps each chunk to its byte offset, enabling **O(1) random access** - the viewer can jump to any chunk without decompressing the rest
 
@@ -101,7 +101,7 @@ The file uses a custom binary format (magic bytes: `WGCH`, version 2). All value
 +---------------------------------------------+
 ```
 
-The config block stores: `map_size`, `scale`, `octaves`, `persistence`, `lacunarity`, `seed`, `water_threshold`, `city_spacing`, `min_city_slots_per_island`, and `playable_radius`.
+The config block stores: `map_size`, `scale`, `octaves`, `persistence`, `lacunarity`, `seed`, `water_threshold`, `city_spacing`, `min_city_slots_per_island`, `playable_radius`, and `farland_margin`.
 
 ## Requirements
 
@@ -168,7 +168,7 @@ All parameters live in `WorldConfig` ([src/config.rs](src/config.rs)) and have s
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `map_size` | 10'000 | Side length of the square world (tiles) |
+| `map_size` | 10,000 | Side length of the square world (tiles) |
 | `chunk_size` | 256 | Side length of one chunk (tiles) |
 | `seed` | Random positive value | Perlin noise seed |
 | `scale` | 50.0 | Base noise frequency (higher = more detail) |
@@ -176,7 +176,7 @@ All parameters live in `WorldConfig` ([src/config.rs](src/config.rs)) and have s
 | `persistence` | 0.5 | Amplitude decay per octave |
 | `lacunarity` | 2.5 | Frequency multiplier per octave |
 | `water_threshold` | 0.55 | Elevation below this = water |
-| `playable_radius` | 80% of half map | Max distance from center for gameplay |
+| `farland_margin` | 2 x city_spacing | Gap (tiles) between playable area and FarLand |
 | `city_spacing` | 5 | Minimum tile gap between cities |
 | `min_city_slots_per_island` | 6 | Islands with fewer slots are discarded |
 | `min_water_body_size` | 500 | Minimum ocean size (tiles) for coastal check |

@@ -1,8 +1,9 @@
-var MAP_SIZE = 10000;
-var TILE_SIZE = 256;
-var MAX_ZOOM = 8;
-var ISLAND_ZOOM_MIN = 3;
-var CITY_ZOOM_THRESHOLD = 7;
+var MAP_SIZE = {{ MAP_SIZE }};
+var TILE_SIZE = {{ TILE_SIZE }};
+var MAX_ZOOM = {{ MAX_ZOOM }};
+// Zoom thresholds scale with MAX_ZOOM so they work for any map size.
+var ISLAND_ZOOM_MIN = Math.max(1, Math.round(MAX_ZOOM * 0.375));
+var CITY_ZOOM_THRESHOLD = Math.max(2, Math.round(MAX_ZOOM * 0.875));
 var MAX_ENTITIES = 500;
 var factor = TILE_SIZE / MAP_SIZE;
 var WORLD_FP = document.body.getAttribute('data-world-fingerprint') || '0';
@@ -16,7 +17,7 @@ var CustomCRS = L.extend({}, L.CRS.Simple, {
 
 var map = L.map('map', {
     crs: CustomCRS,
-    minZoom: 2,
+    minZoom: 0,
     maxZoom: MAX_ZOOM,
     zoomSnap: 1,
     zoomDelta: 1
@@ -110,13 +111,22 @@ function updateIslandView() {
     var vb = map.getBounds();
     var z = map.getZoom();
     var count = 0;
+    // At low zoom levels, hide small islands to reduce clutter.
+    // The city-count threshold scales with map area (100 is the baseline for
+    // a 10,000 x 10,000 world) and fades out as you zoom closer to CITY_ZOOM_THRESHOLD.
+    var areaRatio = (MAP_SIZE * MAP_SIZE) / (10000 * 10000);
+    var baseCityFilter = Math.round(100 * areaRatio);
+    // How far through the island zoom band are we? 0 = just entered, 1 = about to switch to cities.
+    var zoomProgress = (z - ISLAND_ZOOM_MIN) / Math.max(1, CITY_ZOOM_THRESHOLD - ISLAND_ZOOM_MIN - 1);
+    // At the start of the band, filter aggressively; near the city threshold, show everything.
+    var cityFilter = Math.round(baseCityFilter * (1 - Math.min(1, zoomProgress)));
+
     for (var i = 0; i < allIslands.length && count < MAX_ENTITIES; i++) {
         var rid = allIslands[i][0];
         var cx = allIslands[i][1];
         var cy = allIslands[i][2];
         var cityCount = allIslands[i][3];
-        // At zoom 3-4, only show large islands (>100 cities)
-        if (z <= 4 && cityCount <= 100) continue;
+        if (cityCount <= cityFilter) continue;
         var latlng = L.latLng(cy, cx);
         if (vb.contains(latlng)) {
             var marker = L.marker(latlng, { icon: makeIslandIcon(cityCount) });
