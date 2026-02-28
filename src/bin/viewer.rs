@@ -355,9 +355,9 @@ fn handle_outline(request: Request, url: &str, state: &mut ServerState) {
 /// Serialize a list of islands to a JSON array.
 ///
 /// Each entry is:
-/// `[id, cx, cy, city_count, min_x, min_y, max_x, max_y, world_spawn, spawn_order]`
+/// `[id, cx, cy, city_count, min_x, min_y, max_x, max_y, is_world_spawn, spawn_order]`
 ///
-/// `world_spawn` is `1` for the designated spawn island, `0` otherwise.
+/// `is_world_spawn` is `1` for the designated spawn island, `0` otherwise.
 /// `spawn_order` is `0` for the spawn island, then `1, 2, 3, …` in order of
 /// centroid distance from the spawn.
 fn islands_to_json(islands: &[Island]) -> String {
@@ -374,7 +374,7 @@ fn islands_to_json(islands: &[Island]) -> String {
                 i.bounds.min_y,
                 i.bounds.max_x,
                 i.bounds.max_y,
-                i.world_spawn as u8,
+                i.is_world_spawn as u8,
                 i.spawn_order,
             )
         })
