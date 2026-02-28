@@ -294,6 +294,15 @@ impl ChunkedWorldReader {
     pub fn load_chunk(&self, cx: u32, cy: u32) -> io::Result<ChunkData> {
         let h = &self.header;
         let chunk_size = h.config.chunk_size as u32;
+        if cx >= h.chunks_x || cy >= h.chunks_y {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "invalid chunk coordinates ({}, {}) for grid {}x{}",
+                    cx, cy, h.chunks_x, h.chunks_y
+                ),
+            ));
+        }
         let idx = (cy * h.chunks_x + cx) as usize;
         let entry = &self.index[idx];
 
