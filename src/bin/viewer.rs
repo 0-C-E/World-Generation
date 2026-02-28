@@ -17,7 +17,8 @@ use world_generator::World;
 
 const HTML: &str = include_str!("../../static/index.html");
 const CSS: &str = include_str!("../../static/style.css");
-const JS: &str = include_str!("../../static/viewer.js");
+const VIEWER_JS: &str = include_str!("../../static/viewer.js");
+const NIGHT_MODE_JS: &str = include_str!("../../static/night-mode.js");
 const CITY_ICON_SVG: &str = include_str!("../../static/city-icon.svg");
 const DEBUG_HTML: &str = include_str!("../../static/debug.html");
 const DEBUG_CSS: &str = include_str!("../../static/debug.css");
@@ -120,7 +121,11 @@ fn handle_request(request: Request, url: &str, full_url: &str, state: &mut Serve
         }
         "/style.css" => respond(request, "text/css", CSS),
         "/viewer.js" => {
-            let js = inject_config(JS, &state);
+            let js = inject_config(VIEWER_JS, &state);
+            respond(request, "application/javascript", js);
+        }
+        "/night-mode.js" => {
+            let js = inject_config(NIGHT_MODE_JS, &state);
             respond(request, "application/javascript", js);
         }
         "/debug" => {

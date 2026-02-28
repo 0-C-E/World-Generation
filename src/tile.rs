@@ -8,7 +8,6 @@
 //! 2. Sample pixels via `chunk` (shared ref) -- no further I/O.
 
 use crate::biome::{Biome, GoldVeinSampler};
-use crate::color::get_color;
 use crate::font::draw_text;
 use crate::terrain::Terrain;
 use crate::world::World;
@@ -109,7 +108,7 @@ fn render_base(world: &mut World, z: u32, tx: u32, ty: u32) -> Option<(Vec<u8>, 
 
                 let terrain = Terrain::from_u8(chunk.terrain[idx]);
                 let biome = Biome::from_u8(chunk.biomes[idx]);
-                let color = get_color(terrain, chunk.elevation[idx], water_threshold, biome);
+                let color = biome.get_color(terrain, chunk.elevation[idx], water_threshold);
 
                 let off = ((py * TILE_SIZE + px) * 3) as usize;
                 pixels[off] = color[0];

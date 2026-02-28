@@ -230,6 +230,7 @@ static/
   index.html       Leaflet.js map viewer frontend
   style.css        Viewer styles (island icons, city popups, resource colors)
   viewer.js        Map interaction, spatial index, city/island layer management
+  night-mode.js
   debug.html       Debug viewer frontend
   debug.css        Debug panel styles
   debug.js         Debug panel with tile grid info and coordinate tracking
