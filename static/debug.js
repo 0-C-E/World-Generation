@@ -34,6 +34,121 @@ map.setView(center, 3);
 map.setMaxBounds(bounds.pad(0.1));
 
 // ---------------------------------------------------------------------------
+// Spawn-order island overlay
+//
+// Every island is labelled with its spawn order number. The world spawn island
+// gets a distinct gold "★ SPAWN" badge. A connecting polyline traces the
+// population path from the spawn island outward in order, giving an at-a-
+// glance picture of the expansion wave.
+// ---------------------------------------------------------------------------
+
+var spawnLayer = L.layerGroup().addTo(map);
+var spawnLineLayer = L.layerGroup().addTo(map);
+var allIslands = null;
+
+// How many connections to draw on the spawn-order polyline. Set to Infinity
+// to draw all of them (can be noisy on large maps with many islands).
+var MAX_SPAWN_LINE_SEGMENTS = 60;
+
+function makeSpawnOrderIcon(island) {
+    var isSpawn = island[8] === 1;
+    var spawnOrder = island[9];
+    var cityCount = island[3];
+
+    if (isSpawn) {
+        return L.divIcon({
+            className: '',
+            html: '<div class="dbg-island-icon dbg-spawn">\u2605<br>SPAWN<br>' + cityCount + '</div>',
+            iconSize: [56, 56],
+            iconAnchor: [28, 28]
+        });
+    }
+
+    // Color gradient: early orders (low number) are bright green, later ones
+    // fade toward red, giving an intuitive warm/cool heat-map feel.
+    var maxOrder = allIslands ? allIslands.length : 1;
+    var t = Math.min(1, spawnOrder / (maxOrder * 0.6)); // saturate at 60% of islands
+    var r = Math.round(50 + t * 200);
+    var g = Math.round(200 - t * 160);
+    var b = 50;
+    var bg = 'rgb(' + r + ',' + g + ',' + b + ')';
+
+    return L.divIcon({
+        className: '',
+        html: '<div class="dbg-island-icon" style="background:' + bg + ';">'
+            + '#' + spawnOrder + '<br><small>' + cityCount + '</small></div>',
+        iconSize: [40, 40],
+        iconAnchor: [20, 20]
+    });
+}
+
+function renderSpawnOverlay() {
+    spawnLayer.clearLayers();
+    spawnLineLayer.clearLayers();
+    if (!allIslands || allIslands.length === 0) return;
+
+    // Sort a copy by spawn_order so we can draw the connection line in order.
+    var sorted = allIslands.slice().sort(function (a, b) { return a[9] - b[9]; });
+
+    // Draw connecting polyline (spawn → #1 → #2 → …)
+    var linePoints = sorted
+        .slice(0, MAX_SPAWN_LINE_SEGMENTS + 1)
+        .map(function (isl) { return L.latLng(isl[2], isl[1]); });
+
+    if (linePoints.length > 1) {
+        spawnLineLayer.addLayer(L.polyline(linePoints, {
+            color: '#ffe066',
+            weight: 1.5,
+            opacity: 0.55,
+            dashArray: '4 6'
+        }));
+    }
+
+    // Draw island markers for all islands in the current viewport.
+    var vb = map.getBounds();
+    for (var i = 0; i < allIslands.length; i++) {
+        var isl = allIslands[i];
+        var latlng = L.latLng(isl[2], isl[1]);
+        if (!vb.contains(latlng)) continue;
+
+        var marker = L.marker(latlng, { icon: makeSpawnOrderIcon(isl) });
+
+        (function (island) {
+            marker.bindPopup(buildSpawnPopup(island));
+        })(isl);
+
+        spawnLayer.addLayer(marker);
+    }
+}
+
+function buildSpawnPopup(isl) {
+    var isSpawn = isl[8] === 1;
+    var spawnOrder = isl[9];
+    var html = '<b>' + (isSpawn ? '\u2605 World Spawn Island' : 'Island #' + isl[0]) + '</b><br>';
+    html += 'Cities: ' + isl[3] + '<br>';
+    if (!isSpawn) html += 'Spawn order: <b>#' + spawnOrder + '</b><br>';
+    html += 'Centroid: (' + isl[1] + ', ' + isl[2] + ')';
+    return html;
+}
+
+function loadIslands() {
+    fetch('/islands.json')
+        .then(function (r) { return r.json(); })
+        .then(function (islands) {
+            allIslands = islands;
+            renderSpawnOverlay();
+        })
+        .catch(function (e) { console.error('Failed to load islands.json', e); });
+}
+
+loadIslands();
+
+// Re-render markers when panning (the polyline covers the full map already).
+map.on('moveend', function () {
+    if (allIslands) renderSpawnOverlay();
+});
+
+// ---------------------------------------------------------------------------
 // Debug info panel - updates on every zoom/pan
 // ---------------------------------------------------------------------------
 
@@ -60,6 +175,17 @@ function updateDebugPanel() {
     var tileXmax = Math.floor(Math.min(MAP_SIZE - 1, se.lng) / regionW);
     var tileYmax = Math.floor(Math.min(MAP_SIZE - 1, se.lat) / regionH);
 
+    var spawnInfo = '';
+    if (allIslands) {
+        var spawn = allIslands.filter(function (i) { return i[8] === 1; })[0];
+        if (spawn) {
+            spawnInfo = '<div style="margin-top:6px;border-top:1px solid #555;padding-top:4px;color:#ffe066;">'
+                + '\u2605 Spawn island #' + spawn[0] + ' at (' + spawn[1] + ', ' + spawn[2] + ')'
+                + ' &mdash; ' + spawn[3] + ' cities</div>'
+                + '<div><span class="debug-label">Total islands:</span> ' + allIslands.length + '</div>';
+        }
+    }
+
     var html = '';
     html += '<div><span class="debug-label">Zoom:</span> ' + z + '</div>';
     html += '<div><span class="debug-label">Tiles/axis:</span> ' + tilesPerAxis + '</div>';
@@ -74,6 +200,7 @@ function updateDebugPanel() {
     html += '<span class="debug-label">CRS transform:</span> factor=' + factor.toFixed(6) + '</div>';
     html += '<div><span class="debug-label">tileSize:</span> ' + TILE_SIZE + '</div>';
     html += '<div><span class="debug-label">MAP_SIZE:</span> ' + MAP_SIZE + '</div>';
+    html += spawnInfo;
 
     // Check Leaflet's internal tile positioning
     html += '<div style="margin-top:6px;border-top:1px solid #555;padding-top:4px;color:#ff0;">Tile CSS check (first 4):</div>';
@@ -119,3 +246,28 @@ tileLayer.on('tileload', function (e) {
 tileLayer.on('tileerror', function (e) {
     console.error('Tile error z=' + e.coords.z + ' x=' + e.coords.x + ' y=' + e.coords.y);
 });
+
+// Inject debug island icon styles into the page at runtime.
+(function () {
+    var style = document.createElement('style');
+    style.textContent = [
+        '.dbg-island-icon {',
+        '  display: flex; flex-direction: column;',
+        '  align-items: center; justify-content: center;',
+        '  width: 40px; height: 40px; border-radius: 50%;',
+        '  background: rgba(60,180,80,0.85);',
+        '  border: 2px solid rgba(255,255,255,0.85);',
+        '  color: #fff; font: bold 11px/1.1 monospace;',
+        '  text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.5);',
+        '}',
+        '.dbg-island-icon small { font-size: 9px; opacity: 0.85; }',
+        '.dbg-spawn {',
+        '  width: 56px; height: 56px;',
+        '  background: rgba(210,160,0,0.95) !important;',
+        '  border: 3px solid #fff !important;',
+        '  font-size: 13px !important;',
+        '  box-shadow: 0 0 12px 4px rgba(255,200,0,0.6) !important;',
+        '}',
+    ].join('\n');
+    document.head.appendChild(style);
+})();

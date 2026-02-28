@@ -51,6 +51,15 @@ pub struct Island {
     pub centroid: (u32, u32),
     /// Tight axis-aligned bounding box around the island's tiles.
     pub bounds: BoundingBox,
+    /// Whether this island is the designated world spawn (largest island).
+    /// New players place their first city here.
+    pub world_spawn: bool,
+    /// Population order: 0 = world spawn, 1 = nearest to spawn, 2 = next, ...
+    ///
+    /// Determined by straight-line centroid distance from the world spawn
+    /// island. Islands are filled in order from closest to furthest so that
+    /// early-game expansion fans outward naturally from the spawn point.
+    pub spawn_order: u32,
 }
 
 // ---------------------------------------------------------------------------
@@ -59,8 +68,10 @@ pub struct Island {
 
 /// Scan city slots and chunk data to build the island registry.
 ///
-/// Loads all chunks to compute accurate bounding boxes. The chunks remain
-/// in `chunk_cache` afterward so later tile requests are free.
+/// After assembling basic island data the function:
+/// 1. Tags the island with the most city slots as the world spawn.
+/// 2. Ranks every other island by centroid distance from the spawn,
+///    assigning `spawn_order` values starting at 1.
 pub fn discover_islands(
     reader: &ChunkedWorldReader,
     chunk_cache: &mut HashMap<(u32, u32), ChunkData>,
@@ -106,7 +117,7 @@ pub fn discover_islands(
         }
     }
 
-    // Step 3: assemble Island structs.
+    // Step 3: assemble Island structs (world_spawn / spawn_order filled below).
     let mut islands: Vec<Island> = stats
         .into_iter()
         .map(|(rid, (sx, sy, count))| Island {
@@ -117,8 +128,42 @@ pub fn discover_islands(
                 (sy / count as u64) as u32,
             ),
             bounds: bboxes.get(&rid).copied().unwrap_or_default(),
+            world_spawn: false,
+            spawn_order: 0,
         })
         .collect();
+
+    // Step 4: tag the largest island as world spawn.
+    let spawn_centroid = if let Some(spawn) = islands.iter_mut().max_by_key(|i| i.city_count) {
+        spawn.world_spawn = true;
+        eprintln!("Tagged island {} as world spawn ({} cities)", spawn.id, spawn.city_count);
+        spawn.centroid
+    } else {
+        // No islands at all -- nothing more to do.
+        return islands;
+    };
+
+    // Step 5: rank remaining islands by distance from the spawn centroid.
+    //
+    // We use squared distance to avoid the sqrt -- the relative order is
+    // identical and it keeps the arithmetic in integer space.
+    let (sx, sy) = (spawn_centroid.0 as i64, spawn_centroid.1 as i64);
+
+    let mut non_spawn: Vec<&mut Island> = islands
+        .iter_mut()
+        .filter(|i| !i.world_spawn)
+        .collect();
+
+    non_spawn.sort_by_key(|i| {
+        let dx = i.centroid.0 as i64 - sx;
+        let dy = i.centroid.1 as i64 - sy;
+        dx * dx + dy * dy
+    });
+
+    for (order, island) in non_spawn.iter_mut().enumerate() {
+        island.spawn_order = (order + 1) as u32;
+    }
+
     islands.sort_by_key(|i| i.id);
 
     eprintln!("Discovered {} islands", islands.len());

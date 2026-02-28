@@ -45,6 +45,19 @@ body {
     background: rgba(172, 40, 25, 0.9);
 }
 
+.island-icon-spawn {
+    width: 64px;
+    height: 36px;
+    border-radius: 18px;
+    background: rgba(210, 160, 0, 0.95);
+    border: 2px solid #fff;
+    font-size: 14px;
+    letter-spacing: 0.5px;
+    box-shadow: 0 0 10px 3px rgba(255, 200, 0, 0.55),
+        0 2px 6px rgba(0, 0, 0, 0.4);
+    white-space: nowrap;
+}
+
 /* City popup */
 .city-popup .leaflet-popup-content {
     margin: 0;

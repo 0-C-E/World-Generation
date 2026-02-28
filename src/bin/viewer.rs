@@ -30,19 +30,12 @@ const DEBUG_JS: &str = include_str!("../../static/debug.js");
 struct ServerState {
     world: World,
     tile_cache: HashMap<(u32, u32, u32), Vec<u8>>,
-    cities_json: Option<String>,
     islands_json: Option<String>,
     island_outlines: Option<HashMap<u32, String>>,
     world_fingerprint: String,
 }
 
 impl ServerState {
-    fn ensure_cities_json(&mut self) {
-        if self.cities_json.is_none() {
-            self.cities_json = Some(build_cities_json(&mut self.world));
-        }
-    }
-
     fn ensure_islands_json(&mut self) {
         if self.islands_json.is_none() {
             self.world.ensure_islands_computed();
@@ -93,16 +86,14 @@ fn main() {
     let mut state = ServerState {
         world,
         tile_cache: HashMap::new(),
-        cities_json: None,
         islands_json: None,
         island_outlines: None,
         world_fingerprint: fingerprint,
     };
 
-    // Eagerly compute islands and cities so the first request is instant.
-    eprintln!("Pre-computing islands and cities...");
+    // Only pre-compute islands -- cities are served on demand per viewport.
+    eprintln!("Pre-computing islands...");
     state.ensure_islands_json();
-    state.ensure_cities_json();
     eprintln!("Ready.");
 
     let addr = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0:8080".into());
@@ -111,9 +102,9 @@ fn main() {
 
     for request in server.incoming_requests() {
         let full_url = request.url().to_owned();
-        // Strip query string so ?v=fingerprint doesn't affect routing.
+        // Strip query string for routing, but keep full_url for param parsing.
         let url = full_url.split('?').next().unwrap_or(&full_url).to_owned();
-        handle_request(request, &url, &mut state);
+        handle_request(request, &url, &full_url, &mut state);
     }
 }
 
@@ -121,10 +112,9 @@ fn main() {
 // Request routing
 // ---------------------------------------------------------------------------
 
-fn handle_request(request: Request, url: &str, state: &mut ServerState) {
+fn handle_request(request: Request, url: &str, full_url: &str, state: &mut ServerState) {
     match url {
         "/" => {
-            // Inject the world fingerprint so tile URLs bust the cache on world change.
             let html = HTML.replace("{{WORLD_FINGERPRINT}}", &state.world_fingerprint);
             respond(request, "text/html; charset=utf-8", html);
         }
@@ -144,15 +134,9 @@ fn handle_request(request: Request, url: &str, state: &mut ServerState) {
         }
         "/status" => respond(request, "application/json", r#"{"ready":true}"#),
         "/city-icon.svg" => respond(request, "image/svg+xml", CITY_ICON_SVG),
-        "/cities.json" => {
-            state.ensure_cities_json();
-            respond(
-                request,
-                "application/json",
-                state.cities_json.as_deref().unwrap(),
-            );
-        }
 
+        // Viewport-scoped city query: /cities?x0=&y0=&x1=&y1=
+        "/cities" => handle_cities_viewport(request, full_url, state),
         "/islands.json" => {
             state.ensure_islands_json();
             respond(
@@ -243,6 +227,97 @@ fn handle_debug_tile(request: Request, url: &str, state: &mut ServerState) {
 }
 
 // ---------------------------------------------------------------------------
+// Viewport city handler
+// ---------------------------------------------------------------------------
+
+/// Serve only the cities that fall within the requested world-coordinate bbox.
+///
+/// Query params: `x0`, `y0` (top-left), `x1`, `y1` (bottom-right), all in
+/// world tile coordinates. Defaults to the full map if params are absent.
+///
+/// Returns the same JSON shape as the old `/cities.json`:
+/// `[x, y, region_label, {wood, stone, food, metal, favor, gold_nodes, biome}]`
+fn handle_cities_viewport(request: Request, full_url: &str, state: &mut ServerState) {
+    let query = full_url.splitn(2, '?').nth(1).unwrap_or("");
+    let world_w = state.world.width();
+    let world_h = state.world.height();
+
+    let mut x0 = 0u32;
+    let mut y0 = 0u32;
+    let mut x1 = world_w.saturating_sub(1);
+    let mut y1 = world_h.saturating_sub(1);
+
+    for pair in query.split('&') {
+        let mut it = pair.splitn(2, '=');
+        let key = it.next().unwrap_or("");
+        let val: u32 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+        match key {
+            "x0" => x0 = val.min(world_w),
+            "y0" => y0 = val.min(world_h),
+            "x1" => x1 = val.min(world_w.saturating_sub(1)),
+            "y1" => y1 = val.min(world_h.saturating_sub(1)),
+            _ => {}
+        }
+    }
+
+    let json = build_cities_viewport_json(&mut state.world, x0, y0, x1, y1);
+    let no_cache = Header::from_bytes("Cache-Control", "no-store").unwrap();
+    let header = Header::from_bytes("Content-Type", "application/json").unwrap();
+    let _ = request.respond(
+        Response::from_string(json)
+            .with_header(header)
+            .with_header(no_cache),
+    );
+}
+
+/// Build a JSON array of cities within the given world-coordinate bounding box.
+fn build_cities_viewport_json(world: &mut World, x0: u32, y0: u32, x1: u32, y1: u32) -> String {
+    let city_slots = world.city_slots().to_vec();
+    let city_resources = world.city_resources().to_vec();
+    let cs = world.config().chunk_size as u32;
+
+    // Filter to only cities within the requested bbox.
+    let in_bbox: Vec<(usize, u32, u32)> = city_slots
+        .iter()
+        .enumerate()
+        .filter(|(_, &(x, y))| x >= x0 && x <= x1 && y >= y0 && y <= y1)
+        .map(|(i, &(x, y))| (i, x, y))
+        .collect();
+
+    // Group by chunk to batch I/O.
+    let mut by_chunk: HashMap<(u32, u32), Vec<(usize, u32, u32)>> = HashMap::new();
+    for &(i, x, y) in &in_bbox {
+        by_chunk.entry((x / cs, y / cs)).or_default().push((i, x, y));
+    }
+
+    let mut entries: Vec<(usize, String)> = Vec::with_capacity(in_bbox.len());
+
+    for ((cx, cy), cities) in &by_chunk {
+        let _ = world.ensure_chunk(*cx, *cy);
+        if let Some(chunk) = world.chunk(*cx, *cy) {
+            let ox = cx * cs;
+            let oy = cy * cs;
+            for &(i, x, y) in cities {
+                let lx = (x - ox) as usize;
+                let ly = (y - oy) as usize;
+                let idx = ly * chunk.width as usize + lx;
+                let rid = chunk.region_labels[idx];
+                let cr = city_resources.get(i).copied().unwrap_or_default();
+                let biome_name = world_generator::biome::Biome::from_u8(cr.dominant_biome).name();
+                entries.push((i, format!(
+                    "[{x},{y},{rid},{{\"wood\":{},\"stone\":{},\"food\":{},\"metal\":{},\"favor\":{},\"gold_nodes\":{},\"biome\":\"{biome_name}\"}}]",
+                    cr.wood, cr.stone, cr.food, cr.metal, cr.favor, cr.gold_nodes
+                )));
+            }
+        }
+    }
+
+    entries.sort_by_key(|&(i, _)| i);
+    let parts: Vec<&str> = entries.iter().map(|(_, s)| s.as_str()).collect();
+    format!("[{}]", parts.join(","))
+}
+
+// ---------------------------------------------------------------------------
 // Outline handler
 // ---------------------------------------------------------------------------
 
@@ -277,71 +352,20 @@ fn handle_outline(request: Request, url: &str, state: &mut ServerState) {
 // JSON builders
 // ---------------------------------------------------------------------------
 
-/// Build the JSON array for `/cities.json`.
-///
-/// Each entry is:
-/// ```json
-/// [x, y, region_label, {wood, stone, food, metal, favor, gold_nodes, biome}]
-/// ```
-fn build_cities_json(world: &mut World) -> String {
-    let city_slots = world.city_slots().to_vec();
-    let city_resources = world.city_resources().to_vec();
-    let cs = world.config().chunk_size as u32;
-
-    // Build an index-preserving list so we can match resources by position.
-    let indexed: Vec<(usize, u32, u32)> = city_slots
-        .iter()
-        .enumerate()
-        .map(|(i, &(x, y))| (i, x, y))
-        .collect();
-
-    // Group cities by their containing chunk.
-    let mut by_chunk: HashMap<(u32, u32), Vec<(usize, u32, u32)>> = HashMap::new();
-    for &(i, x, y) in &indexed {
-        by_chunk
-            .entry((x / cs, y / cs))
-            .or_default()
-            .push((i, x, y));
-    }
-
-    let mut entries: Vec<(usize, String)> = Vec::with_capacity(city_slots.len());
-
-    for ((cx, cy), cities) in &by_chunk {
-        let _ = world.ensure_chunk(*cx, *cy);
-        if let Some(chunk) = world.chunk(*cx, *cy) {
-            let x0 = cx * cs;
-            let y0 = cy * cs;
-            for &(i, x, y) in cities {
-                let lx = (x - x0) as usize;
-                let ly = (y - y0) as usize;
-                let idx = ly * chunk.width as usize + lx;
-                let rid = chunk.region_labels[idx];
-                let cr = city_resources.get(i).copied().unwrap_or_default();
-                let biome_name = world_generator::biome::Biome::from_u8(cr.dominant_biome).name();
-                entries.push((i, format!(
-                    "[{x},{y},{rid},{{\"wood\":{},\"stone\":{},\"food\":{},\"metal\":{},\"favor\":{},\"gold_nodes\":{},\"biome\":\"{biome_name}\"}}]",
-                    cr.wood, cr.stone, cr.food, cr.metal, cr.favor, cr.gold_nodes
-                )));
-            }
-        }
-    }
-
-    // Sort by original index to keep stable ordering.
-    entries.sort_by_key(|&(i, _)| i);
-    let json_entries: Vec<&str> = entries.iter().map(|(_, s)| s.as_str()).collect();
-    format!("[{}]", json_entries.join(","))
-}
-
 /// Serialize a list of islands to a JSON array.
 ///
-/// Each island is `[id, centroid_x, centroid_y, city_count, min_x, min_y, max_x, max_y]`
-/// to match what the Leaflet frontend expects.
+/// Each entry is:
+/// `[id, cx, cy, city_count, min_x, min_y, max_x, max_y, world_spawn, spawn_order]`
+///
+/// `world_spawn` is `1` for the designated spawn island, `0` otherwise.
+/// `spawn_order` is `0` for the spawn island, then `1, 2, 3, …` in order of
+/// centroid distance from the spawn.
 fn islands_to_json(islands: &[Island]) -> String {
     let entries: Vec<String> = islands
         .iter()
         .map(|i| {
             format!(
-                "[{},{},{},{},{},{},{},{}]",
+                "[{},{},{},{},{},{},{},{},{},{}]",
                 i.id,
                 i.centroid.0,
                 i.centroid.1,
@@ -350,6 +374,8 @@ fn islands_to_json(islands: &[Island]) -> String {
                 i.bounds.min_y,
                 i.bounds.max_x,
                 i.bounds.max_y,
+                i.world_spawn as u8,
+                i.spawn_order,
             )
         })
         .collect();

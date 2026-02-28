@@ -50,13 +50,179 @@ var cityIcon = L.icon({
 var islandLayer = L.layerGroup();
 var cityLayer = L.layerGroup();
 var highlightLayer = L.layerGroup().addTo(map);
-var allIslands = null;  // loaded eagerly at startup
-var allCities = null;   // lazy-loaded on first zoom to high zoom level
-var loadingCities = false; // prevents duplicate in-flight fetches
-var outlineCache = {};  // rid -> [[x,y], ...] polygon points
-var worldReady = false; // tracks whether the server has loaded the world
+var allIslands = null;
+var worldReady = false;
 
-function makeIslandIcon(count) {
+// ---------------------------------------------------------------------------
+// Viewport city fetching
+//
+// Instead of loading all cities at once, we request only the cities within
+// the current viewport (plus a small padding buffer) on every pan/zoom.
+// An AbortController cancels any in-flight request when the viewport changes
+// before the response arrives, so stale data never overwrites fresh data.
+// ---------------------------------------------------------------------------
+
+var activeCityFetch = null;   // current AbortController, or null
+var cityDebounceTimer = null; // debounce handle for pan/zoom events
+
+// How much to expand the fetch bbox beyond the visible viewport (in world
+// tiles). Pre-fetching just outside the edges means nearby cities appear
+// instantly when panning a short distance.
+var FETCH_PADDING_FRAC = 0.25;
+
+function scheduleCityFetch() {
+    clearTimeout(cityDebounceTimer);
+    cityDebounceTimer = setTimeout(fetchCitiesForViewport, 150);
+}
+
+function fetchCitiesForViewport() {
+    // Abort any previous in-flight request.
+    if (activeCityFetch) {
+        activeCityFetch.abort();
+        activeCityFetch = null;
+    }
+
+    var vb = map.getBounds();
+    var padX = (vb.getEast() - vb.getWest()) * FETCH_PADDING_FRAC;
+    var padY = (vb.getNorth() - vb.getSouth()) * FETCH_PADDING_FRAC;
+
+    var x0 = Math.max(0, Math.floor(vb.getWest() - padX));
+    var y0 = Math.max(0, Math.floor(vb.getSouth() - padY));
+    var x1 = Math.min(MAP_SIZE - 1, Math.ceil(vb.getEast() + padX));
+    var y1 = Math.min(MAP_SIZE - 1, Math.ceil(vb.getNorth() + padY));
+
+    var ctrl = new AbortController();
+    activeCityFetch = ctrl;
+
+    setLoading('Loading cities...');
+
+    fetch('/cities?x0=' + x0 + '&y0=' + y0 + '&x1=' + x1 + '&y1=' + y1,
+        { signal: ctrl.signal })
+        .then(function (resp) { return resp.json(); })
+        .then(function (cities) {
+            activeCityFetch = null;
+            clearLoading();
+            renderCities(cities, map.getBounds());
+        })
+        .catch(function (err) {
+            if (err.name !== 'AbortError') {
+                console.error('City fetch failed:', err);
+                clearLoading();
+            }
+            // AbortError is expected and silent -- a newer fetch is already running.
+        });
+}
+
+function renderCities(cities, vb) {
+    cityLayer.clearLayers();
+    for (var i = 0; i < cities.length; i++) {
+        var cx = cities[i][0];
+        var cy = cities[i][1];
+        var rid = cities[i][2];
+        var res = cities[i][3];
+        // Only place markers that are actually inside the (unpadded) viewport.
+        if (!vb.contains(L.latLng(cy, cx))) continue;
+        var marker = L.marker(L.latLng(cy, cx), { icon: cityIcon });
+        marker.bindPopup(buildCityPopup(cx, cy, rid, res),
+            { className: 'city-popup', minWidth: 180 });
+        cityLayer.addLayer(marker);
+    }
+    if (!map.hasLayer(cityLayer)) map.addLayer(cityLayer);
+}
+
+// ---------------------------------------------------------------------------
+// Convex hull (Jarvis march)
+// ---------------------------------------------------------------------------
+
+function cross2d(O, A, B) {
+    return (A[0] - O[0]) * (B[1] - O[1]) - (A[1] - O[1]) * (B[0] - O[0]);
+}
+
+function convexHull(points) {
+    var n = points.length;
+    if (n < 3) return points.slice();
+    var startIdx = 0;
+    for (var i = 1; i < n; i++) {
+        if (points[i][0] < points[startIdx][0] ||
+            (points[i][0] === points[startIdx][0] && points[i][1] < points[startIdx][1])) {
+            startIdx = i;
+        }
+    }
+    var hull = [];
+    var current = startIdx;
+    do {
+        hull.push(points[current]);
+        var next = (current + 1) % n;
+        for (var j = 0; j < n; j++) {
+            if (cross2d(points[current], points[next], points[j]) < 0) next = j;
+        }
+        current = next;
+    } while (current !== startIdx && hull.length <= n);
+    return hull;
+}
+
+// ---------------------------------------------------------------------------
+// Island highlight
+//
+// On click:
+//  1. Immediately draw the bounding-box rectangle (instant, no fetch).
+//  2. Fetch cities within the island's bbox from the server.
+//  3. Upgrade to a convex-hull polygon once the response arrives.
+// ---------------------------------------------------------------------------
+
+var highlightStyle = { color: '#e74c3c', weight: 2, fillOpacity: 0.15, dashArray: '6' };
+
+function drawBboxHighlight(island) {
+    highlightLayer.clearLayers();
+    var minX = island[4], minY = island[5];
+    var maxX = island[6], maxY = island[7];
+    highlightLayer.addLayer(
+        L.rectangle([[minY, minX], [maxY, maxX]], highlightStyle)
+    );
+}
+
+function drawIslandHighlight(island) {
+    // Step 1: instant bbox fallback.
+    drawBboxHighlight(island);
+
+    var rid = island[0];
+    var minX = island[4], minY = island[5];
+    var maxX = island[6], maxY = island[7];
+
+    // Step 2: fetch island's cities and upgrade to hull.
+    fetch('/cities?x0=' + minX + '&y0=' + minY + '&x1=' + maxX + '&y1=' + maxY)
+        .then(function (resp) { return resp.json(); })
+        .then(function (cities) {
+            // Keep only cities that belong to this island.
+            var pts = [];
+            for (var i = 0; i < cities.length; i++) {
+                if (cities[i][2] === rid) pts.push([cities[i][0], cities[i][1]]);
+            }
+            if (pts.length < 3) return; // bbox is already fine for tiny islands
+
+            var hull = convexHull(pts);
+            highlightLayer.clearLayers();
+            highlightLayer.addLayer(
+                L.polygon(hull.map(function (p) { return L.latLng(p[1], p[0]); }),
+                    highlightStyle)
+            );
+        })
+        .catch(function () { /* leave bbox in place on error */ });
+}
+
+// ---------------------------------------------------------------------------
+// Island layer
+// ---------------------------------------------------------------------------
+
+function makeIslandIcon(count, isSpawn) {
+    if (isSpawn) {
+        return L.divIcon({
+            className: '',
+            html: '<div class="island-icon island-icon-spawn">★ Spawn</div>',
+            iconSize: [64, 36],
+            iconAnchor: [32, 18]
+        });
+    }
     var large = count >= 100;
     var size = large ? 44 : 36;
     return L.divIcon({
@@ -67,9 +233,55 @@ function makeIslandIcon(count) {
     });
 }
 
-// Poll server until world data is ready, then load islands
+function updateIslandView() {
+    islandLayer.clearLayers();
+    if (!allIslands) return;
+
+    var vb = map.getBounds();
+    var z = map.getZoom();
+    var count = 0;
+
+    var areaRatio = (MAP_SIZE * MAP_SIZE) / (10000 * 10000);
+    var baseCityFilter = Math.round(100 * areaRatio);
+    var zoomProgress = (z - ISLAND_ZOOM_MIN) / Math.max(1, CITY_ZOOM_THRESHOLD - ISLAND_ZOOM_MIN - 1);
+    var cityFilter = Math.round(baseCityFilter * (1 - Math.min(1, zoomProgress)));
+
+    for (var i = 0; i < allIslands.length && count < MAX_ENTITIES; i++) {
+        var island = allIslands[i];
+        var cy = island[2];
+        var cx_coord = island[1];
+        var cityCount = island[3];
+
+        if (cityCount <= cityFilter) continue;
+        var latlng = L.latLng(cy, cx_coord);
+        if (!vb.contains(latlng)) continue;
+
+        var isSpawn = island[8] === 1;
+        var spawnOrder = island[9];
+        var marker = L.marker(latlng, { icon: makeIslandIcon(cityCount, isSpawn) });
+        var popupLabel = isSpawn
+            ? '★ World Spawn &mdash; ' + cityCount + ' cities'
+            : 'Island #' + island[0] + ' &mdash; ' + cityCount + ' cities'
+            + ' &middot; spawn order #' + spawnOrder;
+        marker.bindPopup(popupLabel);
+
+        (function (isl) {
+            marker.on('click', function () { drawIslandHighlight(isl); });
+        })(island);
+
+        islandLayer.addLayer(marker);
+        count++;
+    }
+
+    if (!map.hasLayer(islandLayer)) map.addLayer(islandLayer);
+}
+
+// ---------------------------------------------------------------------------
+// Startup
+// ---------------------------------------------------------------------------
+
 function waitForReady() {
-    document.getElementById('loading').textContent = 'Loading world data...';
+    setLoading('Loading world data...');
     fetch('/status')
         .then(function (resp) { return resp.json(); })
         .then(function (data) {
@@ -80,103 +292,28 @@ function waitForReady() {
                 setTimeout(waitForReady, 500);
             }
         })
-        .catch(function () {
-            setTimeout(waitForReady, 1000);
-        });
+        .catch(function () { setTimeout(waitForReady, 1000); });
 }
 
-// Load island summaries (called once world is ready)
 function loadIslands() {
-    document.getElementById('loading').textContent = 'Loading islands...';
+    setLoading('Loading islands...');
     fetch('/islands.json')
         .then(function (resp) { return resp.json(); })
         .then(function (islands) {
             allIslands = islands;
-            document.getElementById('loading').style.display = 'none';
+            clearLoading();
             if (map.getZoom() >= ISLAND_ZOOM_MIN && map.getZoom() < CITY_ZOOM_THRESHOLD) {
                 updateIslandView();
             }
         })
-        .catch(function () {
-            document.getElementById('loading').textContent = 'Failed to load islands';
-        });
+        .catch(function () { setLoading('Failed to load islands'); });
 }
 
 waitForReady();
 
-// Render up to MAX_ENTITIES islands visible in the current viewport
-function updateIslandView() {
-    islandLayer.clearLayers();
-    if (!allIslands) return;
-
-    var vb = map.getBounds();
-    var z = map.getZoom();
-    var count = 0;
-    // At low zoom levels, hide small islands to reduce clutter.
-    // The city-count threshold scales with map area (100 is the baseline for
-    // a 10,000 x 10,000 world) and fades out as you zoom closer to CITY_ZOOM_THRESHOLD.
-    var areaRatio = (MAP_SIZE * MAP_SIZE) / (10000 * 10000);
-    var baseCityFilter = Math.round(100 * areaRatio);
-    // How far through the island zoom band are we? 0 = just entered, 1 = about to switch to cities.
-    var zoomProgress = (z - ISLAND_ZOOM_MIN) / Math.max(1, CITY_ZOOM_THRESHOLD - ISLAND_ZOOM_MIN - 1);
-    // At the start of the band, filter aggressively; near the city threshold, show everything.
-    var cityFilter = Math.round(baseCityFilter * (1 - Math.min(1, zoomProgress)));
-
-    for (var i = 0; i < allIslands.length && count < MAX_ENTITIES; i++) {
-        var rid = allIslands[i][0];
-        var cx = allIslands[i][1];
-        var cy = allIslands[i][2];
-        var cityCount = allIslands[i][3];
-        if (cityCount <= cityFilter) continue;
-        var latlng = L.latLng(cy, cx);
-        if (vb.contains(latlng)) {
-            var marker = L.marker(latlng, { icon: makeIslandIcon(cityCount) });
-            marker.bindPopup('Island #' + rid + ' - ' + cityCount + ' cities');
-            // Bounding box highlight on click
-            (function (island) {
-                marker.on('click', function () {
-                    highlightLayer.clearLayers();
-                    var minX = island[4], minY = island[5];
-                    var maxX = island[6], maxY = island[7];
-                    var rect = L.rectangle(
-                        [[minY, minX], [maxY, maxX]],
-                        { color: '#e74c3c', weight: 2, fillOpacity: 0.15, dashArray: '6' }
-                    );
-                    highlightLayer.addLayer(rect);
-                });
-            })(allIslands[i]);
-            islandLayer.addLayer(marker);
-            count++;
-        }
-    }
-    if (!map.hasLayer(islandLayer)) {
-        map.addLayer(islandLayer);
-    }
-}
-
-// Lazy-load individual cities on first zoom to high zoom level
-function loadCities() {
-    if (allCities !== null || loadingCities) return;
-    loadingCities = true;
-    document.getElementById('loading').style.display = '';
-    document.getElementById('loading').textContent = 'Loading cities...';
-
-    fetch('/cities.json')
-        .then(function (resp) { return resp.json(); })
-        .then(function (cities) {
-            allCities = cities;
-            loadingCities = false;
-            document.getElementById('loading').style.display = 'none';
-            if (map.getZoom() >= CITY_ZOOM_THRESHOLD) {
-                updateCityView();
-            }
-        })
-        .catch(function () {
-            document.getElementById('loading').textContent = 'Failed to load cities';
-            loadingCities = false;
-            // allCities remains null, allowing a retry on the next trigger
-        });
-}
+// ---------------------------------------------------------------------------
+// Popup helpers
+// ---------------------------------------------------------------------------
 
 function fmtMod(v) {
     if (v > 0) return '<span class="res-pos">+' + v + '%</span>';
@@ -206,90 +343,51 @@ function buildCityPopup(cx, cy, rid, res) {
     return html;
 }
 
-// Spatial index for fast viewport queries (grid-based).
-// Each cell covers GRID_CELL tiles.  Populated once from allCities.
-var cityGrid = null;
-var GRID_CELL = 256;
+// ---------------------------------------------------------------------------
+// Zoom / pan event handlers
+// ---------------------------------------------------------------------------
 
-function buildCityGrid() {
-    if (!allCities || allCities.length === 0) return;
-    var cols = Math.ceil(MAP_SIZE / GRID_CELL);
-    var rows = Math.ceil(MAP_SIZE / GRID_CELL);
-    cityGrid = { cols: cols, rows: rows, cells: {} };
-    for (var i = 0; i < allCities.length; i++) {
-        var gx = Math.floor(allCities[i][0] / GRID_CELL);
-        var gy = Math.floor(allCities[i][1] / GRID_CELL);
-        var key = gy * cols + gx;
-        if (!cityGrid.cells[key]) cityGrid.cells[key] = [];
-        cityGrid.cells[key].push(i);
-    }
-}
-
-// Show cities visible in the current viewport, capped at MAX_ENTITIES.
-function updateCityView() {
-    cityLayer.clearLayers();
-    if (!allCities || allCities.length === 0) return;
-    if (!cityGrid) buildCityGrid();
-
-    var vb = map.getBounds();
-    var minX = Math.max(0, Math.floor(vb.getWest() / GRID_CELL));
-    var maxX = Math.min(cityGrid.cols - 1, Math.floor(vb.getEast() / GRID_CELL));
-    var minY = Math.max(0, Math.floor(vb.getSouth() / GRID_CELL));
-    var maxY = Math.min(cityGrid.rows - 1, Math.floor(vb.getNorth() / GRID_CELL));
-
-    var count = 0;
-    for (var gy = minY; gy <= maxY && count < MAX_ENTITIES; gy++) {
-        for (var gx = minX; gx <= maxX && count < MAX_ENTITIES; gx++) {
-            var key = gy * cityGrid.cols + gx;
-            var bucket = cityGrid.cells[key];
-            if (!bucket) continue;
-            for (var j = 0; j < bucket.length && count < MAX_ENTITIES; j++) {
-                var ci = bucket[j];
-                var cx = allCities[ci][0];
-                var cy = allCities[ci][1];
-                var latlng = L.latLng(cy, cx);
-                if (vb.contains(latlng)) {
-                    var rid = allCities[ci][2];
-                    var res = allCities[ci][3];
-                    var marker = L.marker(latlng, { icon: cityIcon });
-                    marker.bindPopup(buildCityPopup(cx, cy, rid, res), { className: 'city-popup', minWidth: 180 });
-                    cityLayer.addLayer(marker);
-                    count++;
-                }
-            }
-        }
-    }
-    if (!map.hasLayer(cityLayer)) {
-        map.addLayer(cityLayer);
-    }
-}
-
-// Toggle layers based on zoom
 map.on('zoomend', function () {
     highlightLayer.clearLayers();
     var z = map.getZoom();
     if (z >= CITY_ZOOM_THRESHOLD) {
-        // High zoom: individual cities
         if (map.hasLayer(islandLayer)) map.removeLayer(islandLayer);
-        if (!allCities || allCities.length === 0) loadCities();
-        else updateCityView();
+        scheduleCityFetch();
     } else if (z >= ISLAND_ZOOM_MIN) {
-        // Mid zoom: island summaries
+        // Cancel any pending city fetch when zooming back out.
+        if (activeCityFetch) { activeCityFetch.abort(); activeCityFetch = null; }
+        clearTimeout(cityDebounceTimer);
         if (map.hasLayer(cityLayer)) map.removeLayer(cityLayer);
+        cityLayer.clearLayers();
         updateIslandView();
     } else {
-        // Low zoom: clean map
+        if (activeCityFetch) { activeCityFetch.abort(); activeCityFetch = null; }
+        clearTimeout(cityDebounceTimer);
         if (map.hasLayer(cityLayer)) map.removeLayer(cityLayer);
         if (map.hasLayer(islandLayer)) map.removeLayer(islandLayer);
+        cityLayer.clearLayers();
     }
 });
 
-// Update visible markers on pan
 map.on('moveend', function () {
     var z = map.getZoom();
-    if (z >= CITY_ZOOM_THRESHOLD && allCities && allCities.length > 0) {
-        updateCityView();
-    } else if (z >= ISLAND_ZOOM_MIN && z < CITY_ZOOM_THRESHOLD && allIslands) {
+    if (z >= CITY_ZOOM_THRESHOLD) {
+        scheduleCityFetch();
+    } else if (z >= ISLAND_ZOOM_MIN && allIslands) {
         updateIslandView();
     }
 });
+
+// ---------------------------------------------------------------------------
+// Loading indicator helpers
+// ---------------------------------------------------------------------------
+
+function setLoading(msg) {
+    var el = document.getElementById('loading');
+    el.textContent = msg;
+    el.style.display = '';
+}
+
+function clearLoading() {
+    document.getElementById('loading').style.display = 'none';
+}
