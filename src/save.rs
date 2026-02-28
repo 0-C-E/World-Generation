@@ -1,9 +1,13 @@
-//! World file I/O -- chunked binary format v1.
+//! World file I/O -- chunked binary format.
 //!
 //! The file stores the world as independently-compressed chunks so the
 //! viewer can load tiles on demand. The header records all
 //! [`WorldConfig`](crate::config::WorldConfig) parameters plus a chunk
 //! index that maps `(cx, cy)` to byte offsets for O(1) random access.
+//!
+//! Each chunk stores 6 bytes per tile (terrain, elevation, region label,
+//! biome). Per-city [`CityResources`](crate::biome::CityResources) are
+//! stored in the header.
 
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write};
@@ -12,6 +16,7 @@ use flate2::read::DeflateDecoder;
 use flate2::write::DeflateEncoder;
 use flate2::Compression;
 
+use crate::biome::CityResources;
 use crate::config::WorldConfig;
 use crate::terrain::Terrain;
 
@@ -39,6 +44,10 @@ pub struct WorldData {
     pub region_labels: Vec<u32>,
     /// `(x, y)` world coordinates of every city slot.
     pub city_slots: Vec<(u32, u32)>,
+    /// Row-major biome classification (`Biome::to_u8()`).
+    pub biomes: Vec<u8>,
+    /// Per-city aggregated resource profile, parallel to `city_slots`.
+    pub city_resources: Vec<CityResources>,
 }
 
 /// A single decompressed chunk.
@@ -48,6 +57,8 @@ pub struct ChunkData {
     pub terrain: Vec<u8>,
     pub elevation: Vec<f32>,
     pub region_labels: Vec<u32>,
+    /// Biome classification per tile (`Biome::to_u8()`).
+    pub biomes: Vec<u8>,
 }
 
 /// Metadata stored at the beginning of the chunked file.
@@ -58,6 +69,10 @@ pub struct ChunkedWorldHeader {
     pub chunks_x: u32,
     pub chunks_y: u32,
     pub city_slots: Vec<(u32, u32)>,
+    /// File format version.
+    pub format_version: u8,
+    /// Per-city aggregated resource profiles, parallel to `city_slots`.
+    pub city_resources: Vec<CityResources>,
 }
 
 /// Random-access reader for the chunked world file.
@@ -83,6 +98,8 @@ pub fn build_world_data(
     terrain: Vec<Vec<Terrain>>,
     region_labels: Vec<Vec<usize>>,
     city_slots: &[(usize, usize)],
+    biomes: Vec<Vec<u8>>,
+    city_resources: Vec<CityResources>,
     config: WorldConfig,
 ) -> WorldData {
     let height = elevation.len() as u32;
@@ -95,6 +112,7 @@ pub fn build_world_data(
         .flatten()
         .map(|&r| r as u32)
         .collect();
+    let flat_biomes: Vec<u8> = biomes.into_iter().flatten().collect();
     let city_slots = city_slots
         .iter()
         .map(|&(x, y)| (x as u32, y as u32))
@@ -108,6 +126,8 @@ pub fn build_world_data(
         terrain: flat_terrain,
         region_labels: flat_regions,
         city_slots,
+        biomes: flat_biomes,
+        city_resources,
     }
 }
 
@@ -143,6 +163,17 @@ pub fn save_world_chunked(path: &str, data: &WorldData) -> io::Result<()> {
         write_u16(&mut f, y as u16)?;
     }
 
+    // Per-city resource profiles
+    for cr in &data.city_resources {
+        write_i16(&mut f, cr.wood)?;
+        write_i16(&mut f, cr.stone)?;
+        write_i16(&mut f, cr.food)?;
+        write_i16(&mut f, cr.metal)?;
+        write_i16(&mut f, cr.favor)?;
+        write_u8(&mut f, cr.gold_nodes)?;
+        write_u8(&mut f, cr.dominant_biome)?;
+    }
+
     // -- Chunk index (placeholder, back-patched later) ----------------------
     let index_offset = f.stream_position()?;
     for _ in 0..num_chunks {
@@ -158,7 +189,7 @@ pub fn save_world_chunked(path: &str, data: &WorldData) -> io::Result<()> {
             let ch = chunk_size.min(height - cy * chunk_size);
             let pixels = (cw * ch) as usize;
 
-            let mut raw = Vec::with_capacity(pixels * 5);
+            let mut raw = Vec::with_capacity(pixels * 6);
             for ly in 0..ch {
                 for lx in 0..cw {
                     let gx = (cx * chunk_size + lx) as usize;
@@ -168,6 +199,7 @@ pub fn save_world_chunked(path: &str, data: &WorldData) -> io::Result<()> {
                     let elev_u16 = (data.elevation[idx].clamp(0.0, 1.0) * 65535.0) as u16;
                     raw.extend_from_slice(&elev_u16.to_le_bytes());
                     raw.extend_from_slice(&(data.region_labels[idx] as u16).to_le_bytes());
+                    raw.push(data.biomes[idx]);
                 }
             }
 
@@ -213,7 +245,7 @@ pub fn read_seed_from_file(path: &str) -> Option<u32> {
     }
 
     let version = read_u8(&mut f).ok()?;
-    if version != FORMAT_VERSION {
+    if version == 0 || version > FORMAT_VERSION {
         return None;
     }
 
@@ -238,14 +270,14 @@ impl ChunkedWorldReader {
 
         // Version
         let version = read_u8(&mut f)?;
-        if version != FORMAT_VERSION {
+        if version == 0 || version > FORMAT_VERSION {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("unsupported format version {version}"),
             ));
         }
 
-        // Config (reads the v1 parameter block)
+        // Config
         let mut config = read_config(&mut f)?;
         let width = read_u16(&mut f)? as u32;
         let height = read_u16(&mut f)? as u32;
@@ -261,6 +293,20 @@ impl ChunkedWorldReader {
             let x = read_u16(&mut f)? as u32;
             let y = read_u16(&mut f)? as u32;
             city_slots.push((x, y));
+        }
+
+        // Per-city resource profiles
+        let mut city_resources = Vec::with_capacity(num_cities as usize);
+        for _ in 0..num_cities {
+            city_resources.push(CityResources {
+                wood: read_i16(&mut f)?,
+                stone: read_i16(&mut f)?,
+                food: read_i16(&mut f)?,
+                metal: read_i16(&mut f)?,
+                favor: read_i16(&mut f)?,
+                gold_nodes: read_u8(&mut f)?,
+                dominant_biome: read_u8(&mut f)?,
+            });
         }
 
         // Chunk index
@@ -281,6 +327,8 @@ impl ChunkedWorldReader {
             chunks_x,
             chunks_y,
             city_slots,
+            format_version: version,
+            city_resources,
         };
 
         Ok(Self {
@@ -322,6 +370,7 @@ impl ChunkedWorldReader {
         let mut terrain = Vec::with_capacity(pixels);
         let mut elevation = Vec::with_capacity(pixels);
         let mut region_labels = Vec::with_capacity(pixels);
+        let mut biomes = Vec::with_capacity(pixels);
 
         let mut cursor = Cursor::new(&raw);
         for _ in 0..pixels {
@@ -336,6 +385,10 @@ impl ChunkedWorldReader {
             let mut r = [0u8; 2];
             cursor.read_exact(&mut r)?;
             region_labels.push(u16::from_le_bytes(r) as u32);
+
+            let mut b = [0u8; 1];
+            cursor.read_exact(&mut b)?;
+            biomes.push(b[0]);
         }
 
         Ok(ChunkData {
@@ -344,12 +397,13 @@ impl ChunkedWorldReader {
             terrain,
             elevation,
             region_labels,
+            biomes,
         })
     }
 }
 
 // ---------------------------------------------------------------------------
-// Config serialization (v1)
+// Config serialization
 // ---------------------------------------------------------------------------
 
 /// Write all generation parameters. Types match the wire format directly.
@@ -417,6 +471,9 @@ fn write_u8(w: &mut impl Write, v: u8) -> io::Result<()> {
 fn write_u16(w: &mut impl Write, v: u16) -> io::Result<()> {
     w.write_all(&v.to_le_bytes())
 }
+fn write_i16(w: &mut impl Write, v: i16) -> io::Result<()> {
+    w.write_all(&v.to_le_bytes())
+}
 fn write_u32(w: &mut impl Write, v: u32) -> io::Result<()> {
     w.write_all(&v.to_le_bytes())
 }
@@ -436,6 +493,11 @@ fn read_u16(r: &mut impl Read) -> io::Result<u16> {
     let mut buf = [0u8; 2];
     r.read_exact(&mut buf)?;
     Ok(u16::from_le_bytes(buf))
+}
+fn read_i16(r: &mut impl Read) -> io::Result<i16> {
+    let mut buf = [0u8; 2];
+    r.read_exact(&mut buf)?;
+    Ok(i16::from_le_bytes(buf))
 }
 fn read_u32(r: &mut impl Read) -> io::Result<u32> {
     let mut buf = [0u8; 4];

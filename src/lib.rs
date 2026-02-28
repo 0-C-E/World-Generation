@@ -4,17 +4,19 @@
 //!
 //! | Module | Responsibility |
 //! |--------|---------------|
-//! | [`config`] | [`WorldConfig`] - the single source of every tunable parameter |
-//! | [`elevation`] | Perlin-noise heightmap generation |
-//! | [`terrain`] | Terrain classification and region labeling |
+//! | [`biome`] | Biome classification, resource modifiers, gold veins, city resources |
 //! | [`city`] | Coastal city-slot placement |
-//! | [`color`] | Terrain/elevation to RGB mapping for tile rendering |
+//! | [`color`] | Biome / elevation to RGB mapping for tile rendering |
+//! | [`config`] | [`WorldConfig`] -- the single source of every tunable parameter |
+//! | [`elevation`] | Perlin-noise heightmap generation |
 //! | [`font`] | Minimal 5x7 bitmap font for debug overlays |
-//! | [`save`] | Chunked, compressed binary file format (v1) |
 //! | [`island`] | Island discovery and representation |
-//! | [`world`] | High-level [`World`] facade for game / viewer code |
+//! | [`save`] | Chunked, compressed binary file format |
+//! | [`terrain`] | Terrain classification and region labeling |
 //! | [`tile`] | Slippy-map tile renderer (256 x 256 PNGs) |
+//! | [`world`] | High-level [`World`] facade for game / viewer code |
 
+pub mod biome;
 pub mod config;
 pub mod elevation;
 pub mod terrain;

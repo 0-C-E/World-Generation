@@ -178,30 +178,85 @@ function loadCities() {
         });
 }
 
-// Show all cities from islands that have at least one city in the viewport
+function fmtMod(v) {
+    if (v > 0) return '<span class="res-pos">+' + v + '%</span>';
+    if (v < 0) return '<span class="res-neg">' + v + '%</span>';
+    return '<span class="res-zero">0%</span>';
+}
+
+function buildCityPopup(cx, cy, rid, res) {
+    var rows = [
+        ['\u{1F332} Wood', res.wood],
+        ['\u{26F0}\uFE0F Stone', res.stone],
+        ['\u{1F33E} Food', res.food],
+        ['\u{2699}\uFE0F Metal', res.metal],
+        ['\u{2728} Favor', res.favor]
+    ];
+    var html = '<div class="city-popup-inner">';
+    html += '<div class="city-popup-title">City (' + cx + ', ' + cy + ')</div>';
+    html += '<div class="city-popup-sub">Island #' + rid + ' &middot; ' + res.biome + '</div>';
+    html += '<table class="city-res">';
+    for (var i = 0; i < rows.length; i++) {
+        html += '<tr><td>' + rows[i][0] + '</td><td>' + fmtMod(rows[i][1]) + '</td></tr>';
+    }
+    if (res.gold_nodes > 0) {
+        html += '<tr><td>\u{1FA99} Gold nodes</td><td><span class="res-gold">' + res.gold_nodes + '</span></td></tr>';
+    }
+    html += '</table></div>';
+    return html;
+}
+
+// Spatial index for fast viewport queries (grid-based).
+// Each cell covers GRID_CELL tiles.  Populated once from allCities.
+var cityGrid = null;
+var GRID_CELL = 256;
+
+function buildCityGrid() {
+    if (!allCities || allCities.length === 0) return;
+    var cols = Math.ceil(MAP_SIZE / GRID_CELL);
+    var rows = Math.ceil(MAP_SIZE / GRID_CELL);
+    cityGrid = { cols: cols, rows: rows, cells: {} };
+    for (var i = 0; i < allCities.length; i++) {
+        var gx = Math.floor(allCities[i][0] / GRID_CELL);
+        var gy = Math.floor(allCities[i][1] / GRID_CELL);
+        var key = gy * cols + gx;
+        if (!cityGrid.cells[key]) cityGrid.cells[key] = [];
+        cityGrid.cells[key].push(i);
+    }
+}
+
+// Show cities visible in the current viewport, capped at MAX_ENTITIES.
 function updateCityView() {
     cityLayer.clearLayers();
     if (!allCities || allCities.length === 0) return;
+    if (!cityGrid) buildCityGrid();
 
-    // Pass 1: find which islands have at least one city in the viewport
     var vb = map.getBounds();
-    var visibleIslands = {};
-    for (var i = 0; i < allCities.length; i++) {
-        var latlng = L.latLng(allCities[i][1], allCities[i][0]);
-        if (vb.contains(latlng)) {
-            visibleIslands[allCities[i][2]] = true;
-        }
-    }
+    var minX = Math.max(0, Math.floor(vb.getWest() / GRID_CELL));
+    var maxX = Math.min(cityGrid.cols - 1, Math.floor(vb.getEast() / GRID_CELL));
+    var minY = Math.max(0, Math.floor(vb.getSouth() / GRID_CELL));
+    var maxY = Math.min(cityGrid.rows - 1, Math.floor(vb.getNorth() / GRID_CELL));
 
-    // Pass 2: add all cities belonging to visible islands
-    for (var i = 0; i < allCities.length; i++) {
-        if (visibleIslands[allCities[i][2]]) {
-            var cx = allCities[i][0];
-            var cy = allCities[i][1];
-            var rid = allCities[i][2];
-            var marker = L.marker(L.latLng(cy, cx), { icon: cityIcon });
-            marker.bindPopup('City at (' + cx + ', ' + cy + ') - Island #' + rid);
-            cityLayer.addLayer(marker);
+    var count = 0;
+    for (var gy = minY; gy <= maxY && count < MAX_ENTITIES; gy++) {
+        for (var gx = minX; gx <= maxX && count < MAX_ENTITIES; gx++) {
+            var key = gy * cityGrid.cols + gx;
+            var bucket = cityGrid.cells[key];
+            if (!bucket) continue;
+            for (var j = 0; j < bucket.length && count < MAX_ENTITIES; j++) {
+                var ci = bucket[j];
+                var cx = allCities[ci][0];
+                var cy = allCities[ci][1];
+                var latlng = L.latLng(cy, cx);
+                if (vb.contains(latlng)) {
+                    var rid = allCities[ci][2];
+                    var res = allCities[ci][3];
+                    var marker = L.marker(latlng, { icon: cityIcon });
+                    marker.bindPopup(buildCityPopup(cx, cy, rid, res), { className: 'city-popup', minWidth: 180 });
+                    cityLayer.addLayer(marker);
+                    count++;
+                }
+            }
         }
     }
     if (!map.hasLayer(cityLayer)) {

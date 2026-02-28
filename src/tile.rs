@@ -7,6 +7,7 @@
 //! 1. `ensure_chunk` (mutable) for every chunk the tile overlaps.
 //! 2. Sample pixels via `chunk` (shared ref) -- no further I/O.
 
+use crate::biome::{Biome, GoldVeinSampler};
 use crate::color::get_color;
 use crate::font::draw_text;
 use crate::terrain::Terrain;
@@ -31,10 +32,12 @@ pub fn render_tile(world: &mut World, z: u32, tx: u32, ty: u32) -> Option<Vec<u8
     Some(encode_png(&pixels, TILE_SIZE, TILE_SIZE))
 }
 
-/// Render a debug tile with coloured borders, crosshairs, and coordinate labels
+/// Render a debug tile with colored borders, crosshairs, and coordinate labels
 /// overlaid on the normal tile content.
 pub fn render_debug_tile(world: &mut World, z: u32, tx: u32, ty: u32) -> Option<Vec<u8>> {
+    let seed = world.config().seed;
     let (mut pixels, region) = render_base(world, z, tx, ty)?;
+    draw_gold_overlay(&mut pixels, world, &region, seed);
     draw_debug_overlays(&mut pixels, z, tx, ty, &region);
     Some(encode_png(&pixels, TILE_SIZE, TILE_SIZE))
 }
@@ -105,7 +108,8 @@ fn render_base(world: &mut World, z: u32, tx: u32, ty: u32) -> Option<(Vec<u8>, 
                 let idx = ly * chunk.width as usize + lx;
 
                 let terrain = Terrain::from_u8(chunk.terrain[idx]);
-                let color = get_color(terrain, chunk.elevation[idx], water_threshold);
+                let biome = Biome::from_u8(chunk.biomes[idx]);
+                let color = get_color(terrain, chunk.elevation[idx], water_threshold, biome);
 
                 let off = ((py * TILE_SIZE + px) * 3) as usize;
                 pixels[off] = color[0];
@@ -124,7 +128,7 @@ fn render_base(world: &mut World, z: u32, tx: u32, ty: u32) -> Option<(Vec<u8>, 
 
 /// Draw diagnostic elements on top of a rendered tile.
 fn draw_debug_overlays(pixels: &mut [u8], z: u32, tx: u32, ty: u32, region: &TileRegion) {
-    // Border colour cycles with zoom level.
+    // Border color cycles with zoom level.
     let border: [u8; 3] = match z % 4 {
         0 => [255, 0, 0],
         1 => [0, 255, 0],
@@ -176,6 +180,43 @@ fn draw_debug_overlays(pixels: &mut [u8], z: u32, tx: u32, ty: u32, region: &Til
     for (y, text) in labels {
         draw_text(pixels, TILE_SIZE, 6, y + 1, text, [0, 0, 0]);
         draw_text(pixels, TILE_SIZE, 5, y, text, [255, 255, 255]);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Gold overlay
+// ---------------------------------------------------------------------------
+
+/// Draw a bright marker on every tile that lies on a gold vein.
+fn draw_gold_overlay(pixels: &mut [u8], world: &World, region: &TileRegion, seed: u32) {
+    let width = world.width();
+    let height = world.height();
+    let chunk_size = world.config().chunk_size as u32;
+    let sampler = GoldVeinSampler::new(seed);
+
+    for py in 0..TILE_SIZE {
+        for px in 0..TILE_SIZE {
+            let map_x = (region.x_start + px as f64 * region.width / TILE_SIZE as f64) as u32;
+            let map_y = (region.y_start + py as f64 * region.height / TILE_SIZE as f64) as u32;
+            let map_x = map_x.min(width - 1);
+            let map_y = map_y.min(height - 1);
+
+            let cx = map_x / chunk_size;
+            let cy = map_y / chunk_size;
+
+            if let Some(chunk) = world.chunk(cx, cy) {
+                let lx = (map_x - cx * chunk_size) as usize;
+                let ly = (map_y - cy * chunk_size) as usize;
+                let idx = ly * chunk.width as usize + lx;
+
+                let biome = Biome::from_u8(chunk.biomes[idx]);
+                if sampler.is_gold(map_x as usize, map_y as usize, biome) {
+                    // Gold vein pixel
+                    let gold: [u8; 3] = [255, 215, 0];
+                    set_pixel(pixels, px, py, gold);
+                }
+            }
+        }
     }
 }
 

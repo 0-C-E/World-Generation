@@ -20,7 +20,7 @@ pub const ADVANCE: u32 = GLYPH_W + 1;
 /// * `stride` - number of pixels per row (e.g. 256 for a 256-wide image).
 /// * `x0, y0` - top-left corner of the first character.
 /// * `text` - ASCII string to render.
-/// * `color` - RGB colour for the text.
+/// * `color` - RGB color for the text.
 pub fn draw_text(
     pixels: &mut [u8],
     stride: u32,

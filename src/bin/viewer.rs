@@ -277,40 +277,59 @@ fn handle_outline(request: Request, url: &str, state: &mut ServerState) {
 // JSON builders
 // ---------------------------------------------------------------------------
 
-/// Build the JSON array for `/cities.json`: `[[x, y, region_label], ...]`.
+/// Build the JSON array for `/cities.json`.
+///
+/// Each entry is:
+/// ```json
+/// [x, y, region_label, {wood, stone, food, metal, favor, gold_nodes, biome}]
+/// ```
 fn build_cities_json(world: &mut World) -> String {
     let city_slots = world.city_slots().to_vec();
+    let city_resources = world.city_resources().to_vec();
     let cs = world.config().chunk_size as u32;
 
+    // Build an index-preserving list so we can match resources by position.
+    let indexed: Vec<(usize, u32, u32)> = city_slots
+        .iter()
+        .enumerate()
+        .map(|(i, &(x, y))| (i, x, y))
+        .collect();
+
     // Group cities by their containing chunk.
-    let mut by_chunk: HashMap<(u32, u32), Vec<(u32, u32)>> = HashMap::new();
-    for (x, y) in &city_slots {
+    let mut by_chunk: HashMap<(u32, u32), Vec<(usize, u32, u32)>> = HashMap::new();
+    for &(i, x, y) in &indexed {
         by_chunk
             .entry((x / cs, y / cs))
             .or_default()
-            .push((*x, *y));
+            .push((i, x, y));
     }
 
-    let mut entries = Vec::with_capacity(city_slots.len());
+    let mut entries: Vec<(usize, String)> = Vec::with_capacity(city_slots.len());
 
     for ((cx, cy), cities) in &by_chunk {
         let _ = world.ensure_chunk(*cx, *cy);
         if let Some(chunk) = world.chunk(*cx, *cy) {
             let x0 = cx * cs;
             let y0 = cy * cs;
-            for &(x, y) in cities {
+            for &(i, x, y) in cities {
                 let lx = (x - x0) as usize;
                 let ly = (y - y0) as usize;
                 let idx = ly * chunk.width as usize + lx;
-                entries.push(format!(
-                    "[{x},{y},{}]",
-                    chunk.region_labels[idx]
-                ));
+                let rid = chunk.region_labels[idx];
+                let cr = city_resources.get(i).copied().unwrap_or_default();
+                let biome_name = world_generator::biome::Biome::from_u8(cr.dominant_biome).name();
+                entries.push((i, format!(
+                    "[{x},{y},{rid},{{\"wood\":{},\"stone\":{},\"food\":{},\"metal\":{},\"favor\":{},\"gold_nodes\":{},\"biome\":\"{biome_name}\"}}]",
+                    cr.wood, cr.stone, cr.food, cr.metal, cr.favor, cr.gold_nodes
+                )));
             }
         }
     }
 
-    format!("[{}]", entries.join(","))
+    // Sort by original index to keep stable ordering.
+    entries.sort_by_key(|&(i, _)| i);
+    let json_entries: Vec<&str> = entries.iter().map(|(_, s)| s.as_str()).collect();
+    format!("[{}]", json_entries.join(","))
 }
 
 /// Serialize a list of islands to a JSON array.

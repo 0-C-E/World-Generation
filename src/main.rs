@@ -8,7 +8,7 @@
 use std::time::Instant;
 
 use world_generator::config::WorldConfig;
-use world_generator::{city, elevation, save, terrain};
+use world_generator::{city, elevation, save, terrain, biome};
 
 const OUTPUT_PATH: &str = "world.world";
 
@@ -71,12 +71,46 @@ fn main() {
     });
     println!("  Kept {} city slots after island filter", filtered.len());
 
+    let biomes = timed("Biomes", || {
+        biome::generate_biomes(&config, &terrain_grid, &elevation)
+    });
+
+    // Build per-region city counts so Favor can scale with island size.
+    let region_city_counts: std::collections::HashMap<usize, u32> = {
+        let mut counts = std::collections::HashMap::new();
+        for &(x, y) in &filtered {
+            let rid = region_labels[y][x];
+            if rid > 0 {
+                *counts.entry(rid).or_insert(0u32) += 1;
+            }
+        }
+        counts
+    };
+
+    let city_resources = timed("City resources", || {
+        biome::compute_city_resources(
+            &filtered,
+            &biomes,
+            &region_labels,
+            &region_city_counts,
+            config.min_city_slots_per_island as u32,
+            config.seed,
+        )
+    });
+    {
+        let gold_total: u32 = city_resources.iter().map(|r| r.gold_nodes as u32).sum();
+        let with_gold = city_resources.iter().filter(|r| r.gold_nodes > 0).count();
+        println!("  {with_gold}/{} cities have gold nodes ({gold_total} total)", filtered.len());
+    }
+
     let world_data = timed("Build world data", || {
         save::build_world_data(
             elevation,
             terrain_grid,
             region_labels,
             &filtered,
+            biomes,
+            city_resources,
             config.clone(),
         )
     });

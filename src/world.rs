@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 use std::io;
 
+use crate::biome::CityResources;
 use crate::config::WorldConfig;
 use crate::island::{self, Island};
 use crate::save::{ChunkData, ChunkedWorldReader};
@@ -65,6 +66,11 @@ impl World {
     /// All city slot positions from the file header.
     pub fn city_slots(&self) -> &[(u32, u32)] {
         &self.reader.header.city_slots
+    }
+
+    /// Per-city aggregated resource profiles, parallel to [`city_slots`](Self::city_slots).
+    pub fn city_resources(&self) -> &[CityResources] {
+        &self.reader.header.city_resources
     }
 
     // -- Chunk management ---------------------------------------------------
