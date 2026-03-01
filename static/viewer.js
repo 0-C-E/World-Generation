@@ -214,7 +214,15 @@ function drawIslandHighlight(island) {
 // Island layer
 // ---------------------------------------------------------------------------
 
-function makeIslandIcon(count, isSpawn) {
+function lerpColor(a, b, t) {
+    return [
+        Math.round(a[0] + (b[0] - a[0]) * t),
+        Math.round(a[1] + (b[1] - a[1]) * t),
+        Math.round(a[2] + (b[2] - a[2]) * t),
+    ];
+}
+
+function makeIslandIcon(count, isSpawn, t) {
     if (isSpawn) {
         return L.divIcon({
             className: '',
@@ -223,11 +231,26 @@ function makeIslandIcon(count, isSpawn) {
             iconAnchor: [32, 18]
         });
     }
-    var large = count >= 100;
-    var size = large ? 44 : 36;
+    var bg;
+    if (t === null) {
+        // Only one island on the map — distinct flat teal.
+        bg = 'rgb(22, 160, 180)';
+    } else {
+        // Gradient: cool blue (small) → warm amber (large).
+        // Small islands: #f98d00 (249, 141, 0)
+        // Large islands: #bd2a01 (189, 42, 1)
+        var small = [249, 141, 0];
+        var large = [189, 42, 1];
+        // Apply a slight ease-in so mid-sized islands don't all look the same.
+        var eased = t * t * (3 - 2 * t); // smoothstep
+        var rgb = lerpColor(small, large, eased);
+        bg = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+    }
+
+    var size = count >= 100 ? 44 : 36;
     return L.divIcon({
         className: '',
-        html: '<div class="island-icon' + (large ? ' island-icon-large' : '') + '">' + count + '</div>',
+        html: '<div class="island-icon" style="background:' + bg + ';">' + count + '</div>',
         iconSize: [size, size],
         iconAnchor: [size / 2, size / 2]
     });
@@ -246,6 +269,21 @@ function updateIslandView() {
     var zoomProgress = (z - ISLAND_ZOOM_MIN) / Math.max(1, CITY_ZOOM_THRESHOLD - ISLAND_ZOOM_MIN - 1);
     var cityFilter = Math.round(baseCityFilter * (1 - Math.min(1, zoomProgress)));
 
+    // Gather city-counts of non-spawn islands that pass the filter and are
+    // in the viewport — these are exactly the ones that will be rendered.
+    var visibleCounts = [];
+    for (var i = 0; i < allIslands.length; i++) {
+        var isl = allIslands[i];
+        if (isl[8] === 1) continue;                          // skip spawn
+        if (isl[3] <= cityFilter) continue;                  // below filter
+        if (!vb.contains(L.latLng(isl[2], isl[1]))) continue; // off-screen
+        visibleCounts.push(isl[3]);
+    }
+
+    var minCount = visibleCounts.length > 0 ? Math.min.apply(null, visibleCounts) : 0;
+    var maxCount = visibleCounts.length > 0 ? Math.max.apply(null, visibleCounts) : 1;
+    var singleIsland = visibleCounts.length === 1;
+
     for (var i = 0; i < allIslands.length && count < MAX_ENTITIES; i++) {
         var island = allIslands[i];
         var cy = island[2];
@@ -258,7 +296,16 @@ function updateIslandView() {
 
         var isSpawn = island[8] === 1;
         var spawnOrder = island[9];
-        var marker = L.marker(latlng, { icon: makeIslandIcon(cityCount, isSpawn) });
+
+        // Compute t for this island (null = only island on map).
+        var t = null;
+        if (!isSpawn) {
+            t = singleIsland ? null
+                : maxCount > minCount ? (cityCount - minCount) / (maxCount - minCount)
+                    : 0.5;
+        }
+
+        var marker = L.marker(latlng, { icon: makeIslandIcon(cityCount, isSpawn, t) });
         var popupLabel = isSpawn
             ? '★ World Spawn &mdash; ' + cityCount + ' cities'
             : 'Island #' + island[0] + ' &mdash; ' + cityCount + ' cities'
