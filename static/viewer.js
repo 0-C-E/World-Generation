@@ -247,12 +247,10 @@ function makeIslandIcon(count, isSpawn, t) {
         bg = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
     }
 
-    var size = count >= 100 ? 44 : 36;
+    var size = 24 + Math.round(20 * t);
     return L.divIcon({
         className: '',
-        html: '<div class="island-icon" style="background:' + bg + ';">' + count + '</div>',
-        iconSize: [size, size],
-        iconAnchor: [size / 2, size / 2]
+        html: '<div class="island-icon" style="background:' + bg + ';width:' + size + 'px;height:' + size + 'px;line-height:' + size + 'px;">' + count + '</div>',
     });
 }
 
