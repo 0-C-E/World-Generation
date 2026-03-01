@@ -1,16 +1,16 @@
-var MAP_SIZE = {{ MAP_SIZE }};
-var TILE_SIZE = {{ TILE_SIZE }};
-var MAX_ZOOM = {{ MAX_ZOOM }};
-var factor = TILE_SIZE / MAP_SIZE;
-var WORLD_FP = document.body.getAttribute('data-world-fingerprint') || '0';
-var SESSION = Math.floor(Date.now() / 900000);
+const MAP_SIZE = {{ MAP_SIZE }};
+const TILE_SIZE = {{ TILE_SIZE }};
+const MAX_ZOOM = {{ MAX_ZOOM }};
+const factor = TILE_SIZE / MAP_SIZE;
+const WORLD_FP = document.body.getAttribute('data-world-fingerprint') || '0';
+const SESSION = Math.floor(Date.now() / 900000);
 
 // Custom CRS: same as the normal viewer
-var CustomCRS = L.extend({}, L.CRS.Simple, {
+let CustomCRS = L.extend({}, L.CRS.Simple, {
     transformation: new L.Transformation(factor, 0, factor, 0)
 });
 
-var map = L.map('map', {
+let map = L.map('map', {
     crs: CustomCRS,
     minZoom: 0,
     maxZoom: MAX_ZOOM,
@@ -18,10 +18,10 @@ var map = L.map('map', {
     zoomDelta: 1
 });
 
-var bounds = L.latLngBounds(L.latLng(0, 0), L.latLng(MAP_SIZE, MAP_SIZE));
+let bounds = L.latLngBounds(L.latLng(0, 0), L.latLng(MAP_SIZE, MAP_SIZE));
 
 // Use debug tiles (/dtile/) which have borders and labels baked in
-var tileLayer = L.tileLayer('/dtile/{z}/{x}/{y}.png?v=' + WORLD_FP + '.' + SESSION, {
+let tileLayer = L.tileLayer('/dtile/{z}/{x}/{y}.png?v=' + WORLD_FP + '.' + SESSION, {
     minZoom: 0,
     maxZoom: MAX_ZOOM,
     tileSize: TILE_SIZE,
@@ -29,7 +29,7 @@ var tileLayer = L.tileLayer('/dtile/{z}/{x}/{y}.png?v=' + WORLD_FP + '.' + SESSI
     bounds: bounds
 }).addTo(map);
 
-var center = L.latLng(MAP_SIZE / 2, MAP_SIZE / 2);
+let center = L.latLng(MAP_SIZE / 2, MAP_SIZE / 2);
 map.setView(center, 3);
 map.setMaxBounds(bounds.pad(0.1));
 
@@ -42,18 +42,18 @@ map.setMaxBounds(bounds.pad(0.1));
 // glance picture of the expansion wave.
 // ---------------------------------------------------------------------------
 
-var spawnLayer = L.layerGroup().addTo(map);
-var spawnLineLayer = L.layerGroup().addTo(map);
-var allIslands = null;
+let spawnLayer = L.layerGroup().addTo(map);
+let spawnLineLayer = L.layerGroup().addTo(map);
+let allIslands = null;
 
 // How many connections to draw on the spawn-order polyline. Set to Infinity
 // to draw all of them (can be noisy on large maps with many islands).
-var MAX_SPAWN_LINE_SEGMENTS = 60;
+const MAX_SPAWN_LINE_SEGMENTS = 60;
 
 function makeSpawnOrderIcon(island) {
-    var isSpawn = island[8] === 1;
-    var spawnOrder = island[9];
-    var cityCount = island[3];
+    let isSpawn = island[8] === 1;
+    let spawnOrder = island[9];
+    let cityCount = island[3];
 
     if (isSpawn) {
         return L.divIcon({
@@ -66,12 +66,12 @@ function makeSpawnOrderIcon(island) {
 
     // Color gradient: early orders (low number) are bright green, later ones
     // fade toward red, giving an intuitive warm/cool heat-map feel.
-    var maxOrder = allIslands ? allIslands.length : 1;
-    var t = Math.min(1, spawnOrder / (maxOrder * 0.6)); // saturate at 60% of islands
-    var r = Math.round(50 + t * 200);
-    var g = Math.round(200 - t * 160);
-    var b = 50;
-    var bg = 'rgb(' + r + ',' + g + ',' + b + ')';
+    let maxOrder = allIslands ? allIslands.length : 1;
+    let t = Math.min(1, spawnOrder / (maxOrder * 0.6)); // saturate at 60% of islands
+    let r = Math.round(50 + t * 200);
+    let g = Math.round(200 - t * 160);
+    let b = 50;
+    let bg = 'rgb(' + r + ',' + g + ',' + b + ')';
 
     return L.divIcon({
         className: '',
@@ -88,10 +88,10 @@ function renderSpawnOverlay() {
     if (!allIslands || allIslands.length === 0) return;
 
     // Sort a copy by spawn_order so we can draw the connection line in order.
-    var sorted = allIslands.slice().sort(function (a, b) { return a[9] - b[9]; });
+    let sorted = allIslands.slice().sort(function (a, b) { return a[9] - b[9]; });
 
     // Draw connecting polyline (spawn → #1 → #2 → …)
-    var linePoints = sorted
+    let linePoints = sorted
         .slice(0, MAX_SPAWN_LINE_SEGMENTS + 1)
         .map(function (isl) { return L.latLng(isl[2], isl[1]); });
 
@@ -105,13 +105,13 @@ function renderSpawnOverlay() {
     }
 
     // Draw island markers for all islands in the current viewport.
-    var vb = map.getBounds();
-    for (var i = 0; i < allIslands.length; i++) {
-        var isl = allIslands[i];
-        var latlng = L.latLng(isl[2], isl[1]);
+    let vb = map.getBounds();
+    for (let i = 0; i < allIslands.length; i++) {
+        let isl = allIslands[i];
+        let latlng = L.latLng(isl[2], isl[1]);
         if (!vb.contains(latlng)) continue;
 
-        var marker = L.marker(latlng, { icon: makeSpawnOrderIcon(isl) });
+        let marker = L.marker(latlng, { icon: makeSpawnOrderIcon(isl) });
 
         (function (island) {
             marker.bindPopup(buildSpawnPopup(island));
@@ -122,9 +122,9 @@ function renderSpawnOverlay() {
 }
 
 function buildSpawnPopup(isl) {
-    var isSpawn = isl[8] === 1;
-    var spawnOrder = isl[9];
-    var html = '<b>' + (isSpawn ? '\u2605 World Spawn Island' : 'Island #' + isl[0]) + '</b><br>';
+    let isSpawn = isl[8] === 1;
+    let spawnOrder = isl[9];
+    let html = '<b>' + (isSpawn ? '\u2605 World Spawn Island' : 'Island #' + isl[0]) + '</b><br>';
     html += 'Cities: ' + isl[3] + '<br>';
     if (!isSpawn) html += 'Spawn order: <b>#' + spawnOrder + '</b><br>';
     html += 'Centroid: (' + isl[1] + ', ' + isl[2] + ')';
@@ -152,32 +152,32 @@ map.on('moveend', function () {
 // Debug info panel - updates on every zoom/pan
 // ---------------------------------------------------------------------------
 
-var debugInfo = document.getElementById('debug-info');
+let debugInfo = document.getElementById('debug-info');
 
 function updateDebugPanel() {
-    var z = map.getZoom();
-    var c = map.getCenter();
-    var b = map.getBounds();
-    var size = map.getSize();
-    var tilesPerAxis = Math.pow(2, z);
-    var regionW = MAP_SIZE / tilesPerAxis;
-    var regionH = MAP_SIZE / tilesPerAxis;
+    let z = map.getZoom();
+    let c = map.getCenter();
+    let b = map.getBounds();
+    let size = map.getSize();
+    let tilesPerAxis = Math.pow(2, z);
+    let regionW = MAP_SIZE / tilesPerAxis;
+    let regionH = MAP_SIZE / tilesPerAxis;
 
     // Pixel bounds from Leaflet's perspective
-    var pixelOrigin = map.getPixelOrigin();
-    var pixelBounds = map.getPixelBounds();
+    let pixelOrigin = map.getPixelOrigin();
+    let pixelBounds = map.getPixelBounds();
 
     // Which tile indices are visible
-    var nw = b.getNorthWest();
-    var se = b.getSouthEast();
-    var tileXmin = Math.floor(Math.max(0, nw.lng) / regionW);
-    var tileYmin = Math.floor(Math.max(0, nw.lat) / regionH);
-    var tileXmax = Math.floor(Math.min(MAP_SIZE - 1, se.lng) / regionW);
-    var tileYmax = Math.floor(Math.min(MAP_SIZE - 1, se.lat) / regionH);
+    let nw = b.getNorthWest();
+    let se = b.getSouthEast();
+    let tileXmin = Math.floor(Math.max(0, nw.lng) / regionW);
+    let tileYmin = Math.floor(Math.max(0, nw.lat) / regionH);
+    let tileXmax = Math.floor(Math.min(MAP_SIZE - 1, se.lng) / regionW);
+    let tileYmax = Math.floor(Math.min(MAP_SIZE - 1, se.lat) / regionH);
 
-    var spawnInfo = '';
+    let spawnInfo = '';
     if (allIslands) {
-        var spawn = allIslands.filter(function (i) { return i[8] === 1; })[0];
+        let spawn = allIslands.filter(function (i) { return i[8] === 1; })[0];
         if (spawn) {
             spawnInfo = '<div style="margin-top:6px;border-top:1px solid #555;padding-top:4px;color:#ffe066;">'
                 + '\u2605 Spawn island #' + spawn[0] + ' at (' + spawn[1] + ', ' + spawn[2] + ')'
@@ -186,7 +186,7 @@ function updateDebugPanel() {
         }
     }
 
-    var html = '';
+    let html = '';
     html += '<div><span class="debug-label">Zoom:</span> ' + z + '</div>';
     html += '<div><span class="debug-label">Tiles/axis:</span> ' + tilesPerAxis + '</div>';
     html += '<div><span class="debug-label">Region size:</span> ' + regionW.toFixed(2) + ' x ' + regionH.toFixed(2) + ' world px</div>';
@@ -204,15 +204,15 @@ function updateDebugPanel() {
 
     // Check Leaflet's internal tile positioning
     html += '<div style="margin-top:6px;border-top:1px solid #555;padding-top:4px;color:#ff0;">Tile CSS check (first 4):</div>';
-    var tiles = document.querySelectorAll('.leaflet-tile');
-    var count = 0;
-    for (var i = 0; i < tiles.length && count < 4; i++) {
-        var tile = tiles[i];
+    let tiles = document.querySelectorAll('.leaflet-tile');
+    let count = 0;
+    for (let i = 0; i < tiles.length && count < 4; i++) {
+        let tile = tiles[i];
         if (tile.src && tile.src.indexOf('/dtile/') !== -1) {
-            var parts = tile.src.match(/\/dtile\/(\d+)\/(\d+)\/(\d+)/);
+            let parts = tile.src.match(/\/dtile\/(\d+)\/(\d+)\/(\d+)/);
             if (parts) {
-                var tz = parts[1], tx = parts[2], ty = parts[3];
-                var style = tile.style;
+                let tz = parts[1], tx = parts[2], ty = parts[3];
+                let style = tile.style;
                 html += '<div>  t(' + tz + '/' + tx + '/' + ty + ') pos=' + style.left + ',' + style.top + ' w=' + style.width + ' h=' + style.height + '</div>';
                 count++;
             }
@@ -231,9 +231,9 @@ setTimeout(updateDebugPanel, 500);
 
 // Also log to console when tiles load
 tileLayer.on('tileload', function (e) {
-    var coords = e.coords;
-    var tile = e.tile;
-    var rect = tile.getBoundingClientRect();
+    let coords = e.coords;
+    let tile = e.tile;
+    let rect = tile.getBoundingClientRect();
     console.log(
         'Tile loaded z=' + coords.z + ' x=' + coords.x + ' y=' + coords.y +
         ' | CSS: left=' + tile.style.left + ' top=' + tile.style.top +
@@ -249,7 +249,7 @@ tileLayer.on('tileerror', function (e) {
 
 // Inject debug island icon styles into the page at runtime.
 (function () {
-    var style = document.createElement('style');
+    let style = document.createElement('style');
     style.textContent = [
         '.dbg-island-icon {',
         '  display: flex; flex-direction: column;',

@@ -6,28 +6,28 @@
 // until the *next* automatic switch (i.e. it resets on the hour boundary).
 // ---------------------------------------------------------------------------
 
-var NIGHT_HOUR_START = 18; // 18h00 → night
-var NIGHT_HOUR_END = 6;  // 06h00 → day
+let NIGHT_HOUR_START = 18; // 18h00 → night
+let NIGHT_HOUR_END = 6;  // 06h00 → day
 
-var OVERRIDE_KEY = 'worldviewer_night_override'; // '0' | '1' | null
-var OVERRIDE_TS_KEY = 'worldviewer_night_override_ts';
+let OVERRIDE_KEY = 'worldviewer_night_override'; // '0' | '1' | null
+let OVERRIDE_TS_KEY = 'worldviewer_night_override_ts';
 
-var tilePaneEl = null;
+let tilePaneEl = null;
 function getTilePane() {
     if (!tilePaneEl) tilePaneEl = document.querySelector('.leaflet-tile-pane');
     return tilePaneEl;
 }
 
 function shouldBeNightNow() {
-    var h = new Date().getHours(); // 0-23
+    let h = new Date().getHours(); // 0-23
     return h >= NIGHT_HOUR_START || h < NIGHT_HOUR_END;
 }
 
 // Returns the epoch-ms of the next auto-switch boundary from now.
 function nextSwitchTime() {
-    var now = new Date();
-    var h = now.getHours();
-    var next = new Date(now);
+    let now = new Date();
+    let h = now.getHours();
+    let next = new Date(now);
     if (h >= NIGHT_HOUR_START) {
         // Currently night → next switch at 06h00 tomorrow.
         next.setDate(next.getDate() + 1);
@@ -43,7 +43,7 @@ function nextSwitchTime() {
 }
 
 function applyNightMode(enabled) {
-    var pane = getTilePane();
+    let pane = getTilePane();
     if (!pane) return;
     if (enabled) {
         pane.classList.add('night');
@@ -58,7 +58,7 @@ function applyNightMode(enabled) {
 
 // Expire a manual override once the next auto-switch boundary is crossed.
 function clearExpiredOverride() {
-    var ts = parseInt(localStorage.getItem(OVERRIDE_TS_KEY) || '0', 10);
+    let ts = parseInt(localStorage.getItem(OVERRIDE_TS_KEY) || '0', 10);
     if (ts && Date.now() >= ts) {
         localStorage.removeItem(OVERRIDE_KEY);
         localStorage.removeItem(OVERRIDE_TS_KEY);
@@ -67,13 +67,13 @@ function clearExpiredOverride() {
 
 function resolveNightMode() {
     clearExpiredOverride();
-    var override = localStorage.getItem(OVERRIDE_KEY);
+    let override = localStorage.getItem(OVERRIDE_KEY);
     if (override !== null) return override === '1';
     return shouldBeNightNow();
 }
 
 // Apply immediately on load.
-var nightMode = resolveNightMode();
+let nightMode = resolveNightMode();
 setTimeout(function () { applyNightMode(nightMode); }, 0);
 
 // Manual override button.
@@ -87,7 +87,7 @@ document.getElementById('btn-night').addEventListener('click', function () {
 
 // Auto-switch: schedule a timer for the next boundary, then repeat.
 function scheduleAutoSwitch() {
-    var delay = nextSwitchTime() - Date.now();
+    let delay = nextSwitchTime() - Date.now();
     setTimeout(function () {
         localStorage.removeItem(OVERRIDE_KEY);
         localStorage.removeItem(OVERRIDE_TS_KEY);

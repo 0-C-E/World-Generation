@@ -1,21 +1,21 @@
-var MAP_SIZE = {{ MAP_SIZE }};
-var TILE_SIZE = {{ TILE_SIZE }};
-var MAX_ZOOM = {{ MAX_ZOOM }};
+const MAP_SIZE = {{ MAP_SIZE }};
+const TILE_SIZE = {{ TILE_SIZE }};
+const MAX_ZOOM = {{ MAX_ZOOM }};
 // Zoom thresholds scale with MAX_ZOOM so they work for any map size.
-var CITY_ZOOM_THRESHOLD = Math.max(2, Math.round(MAX_ZOOM * 0.875));
-var MAX_ISLAND_DISPLAY = 100;
-var MAX_ENTITIES = 500;
-var factor = TILE_SIZE / MAP_SIZE;
-var WORLD_FP = document.body.getAttribute('data-world-fingerprint') || '0';
+const CITY_ZOOM_THRESHOLD = Math.max(2, Math.round(MAX_ZOOM * 0.875));
+const MAX_ISLAND_DISPLAY = 100;
+const MAX_ENTITIES = 500;
+const factor = TILE_SIZE / MAP_SIZE;
+const WORLD_FP = document.body.getAttribute('data-world-fingerprint') || '0';
 // Round to 15-minute windows so tiles stay cached within that period.
-var SESSION = Math.floor(Date.now() / 900000);
+const SESSION = Math.floor(Date.now() / 900000);
 
 // Custom CRS: positive-Y-down matching image coordinates
-var CustomCRS = L.extend({}, L.CRS.Simple, {
+let CustomCRS = L.extend({}, L.CRS.Simple, {
     transformation: new L.Transformation(factor, 0, factor, 0)
 });
 
-var map = L.map('map', {
+let map = L.map('map', {
     crs: CustomCRS,
     minZoom: 0,
     maxZoom: MAX_ZOOM,
@@ -23,7 +23,7 @@ var map = L.map('map', {
     zoomDelta: 1
 });
 
-var bounds = L.latLngBounds(L.latLng(0, 0), L.latLng(MAP_SIZE, MAP_SIZE));
+let bounds = L.latLngBounds(L.latLng(0, 0), L.latLng(MAP_SIZE, MAP_SIZE));
 
 L.tileLayer('/tile/{z}/{x}/{y}.png?v=' + WORLD_FP + '.' + SESSION, {
     minZoom: 0,
@@ -34,12 +34,12 @@ L.tileLayer('/tile/{z}/{x}/{y}.png?v=' + WORLD_FP + '.' + SESSION, {
 }).addTo(map);
 
 // Default view at zoom 3, centered on map
-var center = L.latLng(MAP_SIZE / 2, MAP_SIZE / 2);
+let center = L.latLng(MAP_SIZE / 2, MAP_SIZE / 2);
 map.setView(center, Math.max(1, Math.round(MAX_ZOOM * 0.375)));
 map.setMaxBounds(bounds.pad(0.1));
 
 // City marker icon
-var cityIcon = L.icon({
+let cityIcon = L.icon({
     iconUrl: '/city-icon.svg',
     iconSize: [20, 20],
     iconAnchor: [10, 10],
@@ -47,11 +47,11 @@ var cityIcon = L.icon({
 });
 
 // -- Three-tier layer system --
-var islandLayer = L.layerGroup();
-var cityLayer = L.layerGroup();
-var highlightLayer = L.layerGroup().addTo(map);
-var allIslands = null;
-var worldReady = false;
+let islandLayer = L.layerGroup();
+let cityLayer = L.layerGroup();
+let highlightLayer = L.layerGroup().addTo(map);
+let allIslands = null;
+let worldReady = false;
 
 // ---------------------------------------------------------------------------
 // Viewport city fetching
@@ -62,13 +62,13 @@ var worldReady = false;
 // before the response arrives, so stale data never overwrites fresh data.
 // ---------------------------------------------------------------------------
 
-var activeCityFetch = null;   // current AbortController, or null
-var cityDebounceTimer = null; // debounce handle for pan/zoom events
+let activeCityFetch = null;   // current AbortController, or null
+let cityDebounceTimer = null; // debounce handle for pan/zoom events
 
 // How much to expand the fetch bbox beyond the visible viewport (in world
 // tiles). Pre-fetching just outside the edges means nearby cities appear
 // instantly when panning a short distance.
-var FETCH_PADDING_FRAC = 0.25;
+const FETCH_PADDING_FRAC = 0.25;
 
 function scheduleCityFetch() {
     clearTimeout(cityDebounceTimer);
@@ -82,16 +82,16 @@ function fetchCitiesForViewport() {
         activeCityFetch = null;
     }
 
-    var vb = map.getBounds();
-    var padX = (vb.getEast() - vb.getWest()) * FETCH_PADDING_FRAC;
-    var padY = (vb.getNorth() - vb.getSouth()) * FETCH_PADDING_FRAC;
+    let vb = map.getBounds();
+    let padX = (vb.getEast() - vb.getWest()) * FETCH_PADDING_FRAC;
+    let padY = (vb.getNorth() - vb.getSouth()) * FETCH_PADDING_FRAC;
 
-    var x0 = Math.max(0, Math.floor(vb.getWest() - padX));
-    var y0 = Math.max(0, Math.floor(vb.getSouth() - padY));
-    var x1 = Math.min(MAP_SIZE - 1, Math.ceil(vb.getEast() + padX));
-    var y1 = Math.min(MAP_SIZE - 1, Math.ceil(vb.getNorth() + padY));
+    let x0 = Math.max(0, Math.floor(vb.getWest() - padX));
+    let y0 = Math.max(0, Math.floor(vb.getSouth() - padY));
+    let x1 = Math.min(MAP_SIZE - 1, Math.ceil(vb.getEast() + padX));
+    let y1 = Math.min(MAP_SIZE - 1, Math.ceil(vb.getNorth() + padY));
 
-    var ctrl = new AbortController();
+    let ctrl = new AbortController();
     activeCityFetch = ctrl;
 
     setLoading('Loading cities...');
@@ -115,14 +115,14 @@ function fetchCitiesForViewport() {
 
 function renderCities(cities, vb) {
     cityLayer.clearLayers();
-    for (var i = 0; i < cities.length; i++) {
-        var cx = cities[i][0];
-        var cy = cities[i][1];
-        var rid = cities[i][2];
-        var res = cities[i][3];
+    for (let i = 0; i < cities.length; i++) {
+        let cx = cities[i][0];
+        let cy = cities[i][1];
+        let rid = cities[i][2];
+        let res = cities[i][3];
         // Only place markers that are actually inside the (unpadded) viewport.
         if (!vb.contains(L.latLng(cy, cx))) continue;
-        var marker = L.marker(L.latLng(cy, cx), { icon: cityIcon });
+        let marker = L.marker(L.latLng(cy, cx), { icon: cityIcon });
         marker.bindPopup(buildCityPopup(cx, cy, rid, res),
             { className: 'city-popup', minWidth: 180 });
         cityLayer.addLayer(marker);
@@ -139,21 +139,21 @@ function cross2d(O, A, B) {
 }
 
 function convexHull(points) {
-    var n = points.length;
+    let n = points.length;
     if (n < 3) return points.slice();
-    var startIdx = 0;
-    for (var i = 1; i < n; i++) {
+    let startIdx = 0;
+    for (let i = 1; i < n; i++) {
         if (points[i][0] < points[startIdx][0] ||
             (points[i][0] === points[startIdx][0] && points[i][1] < points[startIdx][1])) {
             startIdx = i;
         }
     }
-    var hull = [];
-    var current = startIdx;
+    let hull = [];
+    let current = startIdx;
     do {
         hull.push(points[current]);
-        var next = (current + 1) % n;
-        for (var j = 0; j < n; j++) {
+        let next = (current + 1) % n;
+        for (let j = 0; j < n; j++) {
             if (cross2d(points[current], points[next], points[j]) < 0) next = j;
         }
         current = next;
@@ -170,12 +170,12 @@ function convexHull(points) {
 //  3. Upgrade to a convex-hull polygon once the response arrives.
 // ---------------------------------------------------------------------------
 
-var highlightStyle = { color: '#e74c3c', weight: 2, fillOpacity: 0.15, dashArray: '6' };
+let highlightStyle = { color: '#e74c3c', weight: 2, fillOpacity: 0.15, dashArray: '6' };
 
 function drawBboxHighlight(island) {
     highlightLayer.clearLayers();
-    var minX = island[4], minY = island[5];
-    var maxX = island[6], maxY = island[7];
+    let minX = island[4], minY = island[5];
+    let maxX = island[6], maxY = island[7];
     highlightLayer.addLayer(
         L.rectangle([[minY, minX], [maxY, maxX]], highlightStyle)
     );
@@ -185,22 +185,22 @@ function drawIslandHighlight(island) {
     // Step 1: instant bbox fallback.
     drawBboxHighlight(island);
 
-    var rid = island[0];
-    var minX = island[4], minY = island[5];
-    var maxX = island[6], maxY = island[7];
+    let rid = island[0];
+    let minX = island[4], minY = island[5];
+    let maxX = island[6], maxY = island[7];
 
     // Step 2: fetch island's cities and upgrade to hull.
     fetch('/cities?x0=' + minX + '&y0=' + minY + '&x1=' + maxX + '&y1=' + maxY)
         .then(function (resp) { return resp.json(); })
         .then(function (cities) {
             // Keep only cities that belong to this island.
-            var pts = [];
-            for (var i = 0; i < cities.length; i++) {
+            let pts = [];
+            for (let i = 0; i < cities.length; i++) {
                 if (cities[i][2] === rid) pts.push([cities[i][0], cities[i][1]]);
             }
             if (pts.length < 3) return; // bbox is already fine for tiny islands
 
-            var hull = convexHull(pts);
+            let hull = convexHull(pts);
             highlightLayer.clearLayers();
             highlightLayer.addLayer(
                 L.polygon(hull.map(function (p) { return L.latLng(p[1], p[0]); }),
@@ -231,7 +231,7 @@ function makeIslandIcon(count, isSpawn, t) {
             iconAnchor: [32, 18]
         });
     }
-    var bg;
+    let bg;
     if (t === null) {
         // Only one island on the map -- distinct flat teal.
         bg = 'rgb(22, 160, 180)';
@@ -239,15 +239,15 @@ function makeIslandIcon(count, isSpawn, t) {
         // Gradient: cool blue (small) → warm amber (large).
         // Small islands: #f98d00 (249, 141, 0)
         // Large islands: #bd2a01 (189, 42, 1)
-        var small = [249, 141, 0];
-        var large = [189, 42, 1];
+        let small = [249, 141, 0];
+        let large = [189, 42, 1];
         // Apply a slight ease-in so mid-sized islands don't all look the same.
-        var eased = t * t * (3 - 2 * t); // smoothstep
-        var rgb = lerpColor(small, large, eased);
+        let eased = t * t * (3 - 2 * t); // smoothstep
+        let rgb = lerpColor(small, large, eased);
         bg = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
     }
 
-    var size = 24 + Math.round(20 * t);
+    let size = 24 + Math.round(20 * t);
     return L.divIcon({
         className: '',
         html: '<div class="island-icon" style="background:' + bg + ';width:' + size + 'px;height:' + size + 'px;line-height:' + size + 'px;">' + count + '</div>',
@@ -258,59 +258,55 @@ function updateIslandView() {
     islandLayer.clearLayers();
     if (!allIslands) return;
 
-    var vb = map.getBounds();
+    let vb = map.getBounds();
 
     // Collect all islands visible in the current viewport.
-    var visible = [];
-    for (var i = 0; i < allIslands.length; i++) {
-        var isl = allIslands[i];
+    let visible = [];
+    for (let i = 0; i < allIslands.length; i++) {
+        let isl = allIslands[i];
         if (vb.contains(L.latLng(isl[2], isl[1]))) visible.push(isl);
     }
 
     // Keep only the top MAX_ISLAND_DISPLAY largest (by city count).
     // The spawn island is always included regardless of rank.
     visible.sort(function (a, b) { return b[3] - a[3]; });
-    var spawn = null;
-    var nonSpawn = [];
-    for (var i = 0; i < visible.length; i++) {
+    let spawn = null;
+    let nonSpawn = [];
+    for (let i = 0; i < visible.length; i++) {
         if (visible[i][8] === 1) spawn = visible[i];
         else nonSpawn.push(visible[i]);
     }
-    var topN = nonSpawn.slice(0, MAX_ISLAND_DISPLAY);
+    let topN = nonSpawn.slice(0, MAX_ISLAND_DISPLAY);
 
     // Gradient bounds from the rendered non-spawn set.
-    var minCount = topN.length > 0 ? topN[topN.length - 1][3] : 0;
-    var maxCount = topN.length > 0 ? topN[0][3] : 1;
-    var singleIsland = topN.length === 1;
+    let minCount = topN.length > 0 ? topN[topN.length - 1][3] : 0;
+    let maxCount = topN.length > 0 ? topN[0][3] : 1;
+    let singleIsland = topN.length === 1;
 
     // Render spawn island first (always on top visually).
-    var toRender = spawn ? [spawn].concat(topN) : topN;
+    let toRender = spawn ? [spawn].concat(topN) : topN;
 
-    for (var i = 0; i < toRender.length; i++) {
-        var island = toRender[i];
-        var isSpawn = island[8] === 1;
-        var cityCount = island[3];
-        var spawnOrder = island[9];
+    for (let i = 0; i < toRender.length; i++) {
+        let island = toRender[i];
+        let isSpawn = island[8] === 1;
+        let cityCount = island[3];
+        let spawnOrder = island[9];
 
-        var t = null;
+        let t = null;
         if (!isSpawn) {
             t = singleIsland ? null
                 : maxCount > minCount ? (cityCount - minCount) / (maxCount - minCount)
                     : 0.5;
         }
 
-        var latlng = L.latLng(island[2], island[1]);
-        var marker = L.marker(latlng, { icon: makeIslandIcon(cityCount, isSpawn, t) });
-        var popupLabel = isSpawn
+        let latlng = L.latLng(island[2], island[1]);
+        let marker = L.marker(latlng, { icon: makeIslandIcon(cityCount, isSpawn, t) });
+        let popupLabel = isSpawn
             ? '★ World Spawn &mdash; ' + cityCount + ' cities'
             : 'Island #' + island[0] + ' &mdash; ' + cityCount + ' cities'
             + ' &middot; spawn order #' + spawnOrder;
         marker.bindPopup(popupLabel);
-
-        (function (isl) {
-            marker.on('click', function () { drawIslandHighlight(isl); });
-        })(island);
-
+        marker.on('click', function () { drawIslandHighlight(island); });
         islandLayer.addLayer(marker);
     }
 
@@ -363,18 +359,18 @@ function fmtMod(v) {
 }
 
 function buildCityPopup(cx, cy, rid, res) {
-    var rows = [
+    let rows = [
         ['\u{1F332} Wood', res.wood],
         ['\u{26F0}\uFE0F Stone', res.stone],
         ['\u{1F33E} Food', res.food],
         ['\u{2699}\uFE0F Metal', res.metal],
         ['\u{2728} Favor', res.favor]
     ];
-    var html = '<div class="city-popup-inner">';
+    let html = '<div class="city-popup-inner">';
     html += '<div class="city-popup-title">City (' + cx + ', ' + cy + ')</div>';
     html += '<div class="city-popup-sub">Island #' + rid + ' &middot; ' + res.biome + '</div>';
     html += '<table class="city-res">';
-    for (var i = 0; i < rows.length; i++) {
+    for (let i = 0; i < rows.length; i++) {
         html += '<tr><td>' + rows[i][0] + '</td><td>' + fmtMod(rows[i][1]) + '</td></tr>';
     }
     if (res.gold_nodes > 0) {
@@ -390,7 +386,7 @@ function buildCityPopup(cx, cy, rid, res) {
 
 map.on('zoomend', function () {
     highlightLayer.clearLayers();
-    var z = map.getZoom();
+    let z = map.getZoom();
     if (z >= CITY_ZOOM_THRESHOLD) {
         if (map.hasLayer(islandLayer)) map.removeLayer(islandLayer);
         scheduleCityFetch();
@@ -405,7 +401,7 @@ map.on('zoomend', function () {
 });
 
 map.on('moveend', function () {
-    var z = map.getZoom();
+    let z = map.getZoom();
     if (z >= CITY_ZOOM_THRESHOLD) {
         scheduleCityFetch();
     } else if (allIslands) {
@@ -418,7 +414,7 @@ map.on('moveend', function () {
 // ---------------------------------------------------------------------------
 
 function setLoading(msg) {
-    var el = document.getElementById('loading');
+    let el = document.getElementById('loading');
     el.textContent = msg;
     el.style.display = '';
 }
