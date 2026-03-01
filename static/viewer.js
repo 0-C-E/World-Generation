@@ -4,7 +4,6 @@ const MAX_ZOOM = {{ MAX_ZOOM }};
 // Zoom thresholds scale with MAX_ZOOM so they work for any map size.
 const CITY_ZOOM_THRESHOLD = Math.max(2, Math.round(MAX_ZOOM * 0.875));
 const MAX_ISLAND_DISPLAY = 100;
-const MAX_ENTITIES = 500;
 const factor = TILE_SIZE / MAP_SIZE;
 const WORLD_FP = document.body.getAttribute('data-world-fingerprint') || '0';
 // Round to 15-minute windows so tiles stay cached within that period.
@@ -251,6 +250,8 @@ function makeIslandIcon(count, isSpawn, t) {
     return L.divIcon({
         className: '',
         html: '<div class="island-icon" style="background:' + bg + ';width:' + size + 'px;height:' + size + 'px;line-height:' + size + 'px;">' + count + '</div>',
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
     });
 }
 
@@ -392,7 +393,7 @@ map.on('zoomend', function () {
         scheduleCityFetch();
     } else {
         // Zoomed out of city view -- cancel any pending fetch and show islands.
-        if (activeCityFetch) { activeCityFetch.abort(); activeCityFetch = null; }
+        if (activeCityFetch) { activeCityFetch.abort(); activeCityFetch = null; clearLoading(); }
         clearTimeout(cityDebounceTimer);
         if (map.hasLayer(cityLayer)) map.removeLayer(cityLayer);
         cityLayer.clearLayers();

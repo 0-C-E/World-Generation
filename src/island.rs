@@ -75,9 +75,8 @@ pub fn discover_islands(
     let header = &reader.header;
     let chunk_size = header.config.chunk_size as u32;
 
-    // Step 1: Gather per-region city stats (sum_x, sum_y, count) and bounding boxes.
+    // Step 1: Gather per-region city stats (sum_x, sum_y, count).
     let mut city_stats: HashMap<u32, (u64, u64, u32)> = HashMap::new();
-    let mut bounding_boxes: HashMap<u32, BoundingBox> = HashMap::new();
     for &(x, y) in &header.city_slots {
         let region_id = region_label_at(reader, chunk_cache, chunk_size, x, y);
         if region_id == 0 {
@@ -87,13 +86,34 @@ pub fn discover_islands(
         entry.0 += x as u64;
         entry.1 += y as u64;
         entry.2 += 1;
-        bounding_boxes
-            .entry(region_id)
-            .and_modify(|bb| bb.expand(x, y))
-            .or_insert_with(|| BoundingBox::point(x, y));
     }
 
-    // Step 2: Assemble Island structs (is_world_spawn and spawn_order filled below).
+    // Step 2: Load every chunk and compute bounding boxes from region tiles.
+    let mut bounding_boxes: HashMap<u32, BoundingBox> = HashMap::new();
+    for cy in 0..header.chunks_y {
+        for cx in 0..header.chunks_x {
+            ensure_chunk(reader, chunk_cache, cx, cy);
+            let Some(chunk) = chunk_cache.get(&(cx, cy)) else {
+                continue;
+            };
+            let x0 = cx * chunk_size;
+            let y0 = cy * chunk_size;
+            for ly in 0..chunk.height {
+                for lx in 0..chunk.width {
+                    let region_id = chunk.region_labels[(ly * chunk.width + lx) as usize];
+                    if region_id == 0 || !city_stats.contains_key(&region_id) {
+                        continue;
+                    }
+                    bounding_boxes
+                        .entry(region_id)
+                        .and_modify(|bb| bb.expand(x0 + lx, y0 + ly))
+                        .or_insert_with(|| BoundingBox::point(x0 + lx, y0 + ly));
+                }
+            }
+        }
+    }
+
+    // Step 3: Assemble Island structs (is_world_spawn and spawn_order filled below).
     let mut islands: Vec<Island> = city_stats
         .into_iter()
         .map(|(region_id, (sum_x, sum_y, count))| Island {
@@ -109,7 +129,7 @@ pub fn discover_islands(
         })
         .collect();
 
-    // Step 3: Tag the largest island as world spawn.
+    // Step 4: Tag the largest island as world spawn.
     let spawn_centroid = if let Some(spawn) = islands.iter_mut().max_by_key(|i| i.city_count) {
         spawn.is_world_spawn = true;
         eprintln!("Tagged island {} as world spawn ({} cities)", spawn.id, spawn.city_count);
@@ -119,7 +139,7 @@ pub fn discover_islands(
         return islands;
     };
 
-    // Step 4: Rank remaining islands by distance from the spawn centroid.
+    // Step 5: Rank remaining islands by distance from the spawn centroid.
     // Use squared distance to avoid sqrt; relative order is identical.
     let (sx, sy) = (spawn_centroid.0 as i64, spawn_centroid.1 as i64);
     let mut non_spawn: Vec<&mut Island> = islands
