@@ -2,8 +2,8 @@ var MAP_SIZE = {{ MAP_SIZE }};
 var TILE_SIZE = {{ TILE_SIZE }};
 var MAX_ZOOM = {{ MAX_ZOOM }};
 // Zoom thresholds scale with MAX_ZOOM so they work for any map size.
-var ISLAND_ZOOM_MIN = Math.max(1, Math.round(MAX_ZOOM * 0.375));
 var CITY_ZOOM_THRESHOLD = Math.max(2, Math.round(MAX_ZOOM * 0.875));
+var MAX_ISLAND_DISPLAY = 100;
 var MAX_ENTITIES = 500;
 var factor = TILE_SIZE / MAP_SIZE;
 var WORLD_FP = document.body.getAttribute('data-world-fingerprint') || '0';
@@ -35,7 +35,7 @@ L.tileLayer('/tile/{z}/{x}/{y}.png?v=' + WORLD_FP + '.' + SESSION, {
 
 // Default view at zoom 3, centered on map
 var center = L.latLng(MAP_SIZE / 2, MAP_SIZE / 2);
-map.setView(center, ISLAND_ZOOM_MIN);
+map.setView(center, Math.max(1, Math.round(MAX_ZOOM * 0.375)));
 map.setMaxBounds(bounds.pad(0.1));
 
 // City marker icon
@@ -233,7 +233,7 @@ function makeIslandIcon(count, isSpawn, t) {
     }
     var bg;
     if (t === null) {
-        // Only one island on the map — distinct flat teal.
+        // Only one island on the map -- distinct flat teal.
         bg = 'rgb(22, 160, 180)';
     } else {
         // Gradient: cool blue (small) → warm amber (large).
@@ -259,43 +259,39 @@ function updateIslandView() {
     if (!allIslands) return;
 
     var vb = map.getBounds();
-    var z = map.getZoom();
-    var count = 0;
 
-    var areaRatio = (MAP_SIZE * MAP_SIZE) / (10000 * 10000);
-    var baseCityFilter = Math.round(100 * areaRatio);
-    var zoomProgress = (z - ISLAND_ZOOM_MIN) / Math.max(1, CITY_ZOOM_THRESHOLD - ISLAND_ZOOM_MIN - 1);
-    var cityFilter = Math.round(baseCityFilter * (1 - Math.min(1, zoomProgress)));
-
-    // Gather city-counts of non-spawn islands that pass the filter and are
-    // in the viewport — these are exactly the ones that will be rendered.
-    var visibleCounts = [];
+    // Collect all islands visible in the current viewport.
+    var visible = [];
     for (var i = 0; i < allIslands.length; i++) {
         var isl = allIslands[i];
-        if (isl[8] === 1) continue;                          // skip spawn
-        if (isl[3] <= cityFilter) continue;                  // below filter
-        if (!vb.contains(L.latLng(isl[2], isl[1]))) continue; // off-screen
-        visibleCounts.push(isl[3]);
+        if (vb.contains(L.latLng(isl[2], isl[1]))) visible.push(isl);
     }
 
-    var minCount = visibleCounts.length > 0 ? Math.min.apply(null, visibleCounts) : 0;
-    var maxCount = visibleCounts.length > 0 ? Math.max.apply(null, visibleCounts) : 1;
-    var singleIsland = visibleCounts.length === 1;
+    // Keep only the top MAX_ISLAND_DISPLAY largest (by city count).
+    // The spawn island is always included regardless of rank.
+    visible.sort(function (a, b) { return b[3] - a[3]; });
+    var spawn = null;
+    var nonSpawn = [];
+    for (var i = 0; i < visible.length; i++) {
+        if (visible[i][8] === 1) spawn = visible[i];
+        else nonSpawn.push(visible[i]);
+    }
+    var topN = nonSpawn.slice(0, MAX_ISLAND_DISPLAY);
 
-    for (var i = 0; i < allIslands.length && count < MAX_ENTITIES; i++) {
-        var island = allIslands[i];
-        var cy = island[2];
-        var cx_coord = island[1];
-        var cityCount = island[3];
+    // Gradient bounds from the rendered non-spawn set.
+    var minCount = topN.length > 0 ? topN[topN.length - 1][3] : 0;
+    var maxCount = topN.length > 0 ? topN[0][3] : 1;
+    var singleIsland = topN.length === 1;
 
-        if (cityCount <= cityFilter) continue;
-        var latlng = L.latLng(cy, cx_coord);
-        if (!vb.contains(latlng)) continue;
+    // Render spawn island first (always on top visually).
+    var toRender = spawn ? [spawn].concat(topN) : topN;
 
+    for (var i = 0; i < toRender.length; i++) {
+        var island = toRender[i];
         var isSpawn = island[8] === 1;
+        var cityCount = island[3];
         var spawnOrder = island[9];
 
-        // Compute t for this island (null = only island on map).
         var t = null;
         if (!isSpawn) {
             t = singleIsland ? null
@@ -303,6 +299,7 @@ function updateIslandView() {
                     : 0.5;
         }
 
+        var latlng = L.latLng(island[2], island[1]);
         var marker = L.marker(latlng, { icon: makeIslandIcon(cityCount, isSpawn, t) });
         var popupLabel = isSpawn
             ? '★ World Spawn &mdash; ' + cityCount + ' cities'
@@ -315,7 +312,6 @@ function updateIslandView() {
         })(island);
 
         islandLayer.addLayer(marker);
-        count++;
     }
 
     if (!map.hasLayer(islandLayer)) map.addLayer(islandLayer);
@@ -347,7 +343,7 @@ function loadIslands() {
         .then(function (islands) {
             allIslands = islands;
             clearLoading();
-            if (map.getZoom() >= ISLAND_ZOOM_MIN && map.getZoom() < CITY_ZOOM_THRESHOLD) {
+            if (map.getZoom() < CITY_ZOOM_THRESHOLD) {
                 updateIslandView();
             }
         })
@@ -398,19 +394,13 @@ map.on('zoomend', function () {
     if (z >= CITY_ZOOM_THRESHOLD) {
         if (map.hasLayer(islandLayer)) map.removeLayer(islandLayer);
         scheduleCityFetch();
-    } else if (z >= ISLAND_ZOOM_MIN) {
-        // Cancel any pending city fetch when zooming back out.
+    } else {
+        // Zoomed out of city view -- cancel any pending fetch and show islands.
         if (activeCityFetch) { activeCityFetch.abort(); activeCityFetch = null; }
         clearTimeout(cityDebounceTimer);
         if (map.hasLayer(cityLayer)) map.removeLayer(cityLayer);
         cityLayer.clearLayers();
         updateIslandView();
-    } else {
-        if (activeCityFetch) { activeCityFetch.abort(); activeCityFetch = null; }
-        clearTimeout(cityDebounceTimer);
-        if (map.hasLayer(cityLayer)) map.removeLayer(cityLayer);
-        if (map.hasLayer(islandLayer)) map.removeLayer(islandLayer);
-        cityLayer.clearLayers();
     }
 });
 
@@ -418,7 +408,7 @@ map.on('moveend', function () {
     var z = map.getZoom();
     if (z >= CITY_ZOOM_THRESHOLD) {
         scheduleCityFetch();
-    } else if (z >= ISLAND_ZOOM_MIN && allIslands) {
+    } else if (allIslands) {
         updateIslandView();
     }
 });
