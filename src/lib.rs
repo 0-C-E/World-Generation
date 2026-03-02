@@ -21,7 +21,6 @@ pub mod config;
 pub mod elevation;
 pub mod terrain;
 pub mod city;
-pub mod color;
 pub mod font;
 pub mod save;
 pub mod island;

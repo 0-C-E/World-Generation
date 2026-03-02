@@ -1,6 +1,6 @@
 [package]
 name = "world_generator"
-version = "0.3.0"
+version = "0.1.0"
 edition = "2021"
 default-run = "world_generator"
 
@@ -16,3 +16,37 @@ flate2 = "1"
 png = "0.18.1"
 tiny_http = "0.12"
 dotenvy = "0.15.7"
+
+[profile.dev]
+opt-level = 0
+
+[profile.dev.package.noise]
+opt-level = 3
+
+[profile.dev.package.rayon]
+opt-level = 3
+
+[profile.dev.package.rayon-core]
+opt-level = 3
+
+[profile.dev.package.flate2]
+opt-level = 3
+
+[profile.dev.package.png]
+opt-level = 3
+
+[profile.dev.package.rand]
+opt-level = 3
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = "debuginfo"
+overflow-checks = false
+
+[profile.dist]
+inherits = "release"
+lto = "fat"
+strip = true

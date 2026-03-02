@@ -23,6 +23,42 @@ body {
     font: 13px/1.4 system-ui, sans-serif;
 }
 
+/* Night mode toggle button */
+#btn-night {
+    position: fixed;
+    bottom: 24px;
+    right: 16px;
+    z-index: 1000;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    background: rgba(0, 0, 0, 0.55);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    transition: background 0.2s, border-color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#btn-night:hover {
+    background: rgba(0, 0, 0, 0.75);
+    border-color: rgba(255, 255, 255, 0.8);
+}
+
+/* The filter is applied to the tile pane only — UI elements (popups, markers,
+   loading indicator) are unaffected. Transition makes the switch feel smooth. */
+.leaflet-tile-pane {
+    transition: filter 0.4s ease;
+}
+
+.leaflet-tile-pane.night {
+    filter: brightness(0.50) saturate(0.65) hue-rotate(10deg);
+}
+
 .island-icon {
     display: flex;
     align-items: center;
@@ -43,6 +79,19 @@ body {
     height: 44px;
     font-size: 13px;
     background: rgba(172, 40, 25, 0.9);
+}
+
+.island-icon-spawn {
+    width: 64px;
+    height: 36px;
+    border-radius: 18px;
+    background: rgba(210, 160, 0, 0.95);
+    border: 2px solid #fff;
+    font-size: 14px;
+    letter-spacing: 0.5px;
+    box-shadow: 0 0 10px 3px rgba(255, 200, 0, 0.55),
+        0 2px 6px rgba(0, 0, 0, 0.4);
+    white-space: nowrap;
 }
 
 /* City popup */
