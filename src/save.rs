@@ -77,7 +77,7 @@ pub struct ChunkedWorldHeader {
     pub format_version: u8,
     /// Per-city aggregated resource profiles, parallel to `city_slots`.
     pub city_resources: Vec<CityResources>,
-    /// Empty when loading a version-1 file.
+    /// All villages stored in the world file. Always populated for version-1 files.
     pub villages: Vec<Village>,
 }
 
