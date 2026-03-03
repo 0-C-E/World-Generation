@@ -40,6 +40,8 @@ The generation pipeline is modular and data-driven:
 
 ```mermaid
 flowchart TD
+  subgraph SG[" "]
+  direction LR
     A["Elevation generation<br/>(Perlin noise)"]
     B["Terrain classification<br/>(Water / Land / FarLand)"]
     C["Region labeling<br/>(Flood-fill → Islands)"]
@@ -62,6 +64,7 @@ flowchart TD
     H --> I
     I --> J
     J --> K
+  end
 ```
 
 ### Module organization
