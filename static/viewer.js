@@ -391,7 +391,6 @@ function loadIslands() {
             if (z < VILLAGE_ZOOM_THRESHOLD) {
                 updateIslandView();
             } else if (z < CITY_ZOOM_THRESHOLD) {
-                updateIslandView();
                 scheduleVillageFetch();
             } else {
                 scheduleCityFetch();
