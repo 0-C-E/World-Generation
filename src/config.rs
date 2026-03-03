@@ -134,8 +134,8 @@ impl WorldConfig {
             // Village defaults
             village_alpha: env_f64("VILLAGE_ALPHA", 1.2),
             village_beta:  env_f64("VILLAGE_BETA",  0.60),
-            village_min_ocean_distance: env_u32("VILLAGE_MIN_OCEAN_DISTANCE", 8),
-            village_spacing: env_u32("VILLAGE_SPACING", 20),
+            village_min_ocean_distance: env_u32("VILLAGE_MIN_OCEAN_DISTANCE", 12),
+            village_spacing: env_u32("VILLAGE_SPACING", 30),
         }
     }
 
