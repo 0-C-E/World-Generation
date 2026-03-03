@@ -10,13 +10,12 @@ const WORLD_FP = document.body.getAttribute('data-world-fingerprint') || '0';
 const SESSION = Math.floor(Date.now() / 900000);
 
 // Resource display helpers
-const RES_ICON = { Wood: '🌲', Stone: '⛰️', Food: '🌾', Metal: '⚙️', Favor: '✨' };
+const RES_ICON = { Wood: '🌲', Stone: '⛰️', Food: '🌾', Metal: '⚙️' };
 const RES_COLOR = {
     Wood: '#27ae60',
     Stone: '#7f8c8d',
     Food: '#e67e22',
     Metal: '#2980b9',
-    Favor: '#8e44ad',
 };
 
 // Custom CRS: positive-Y-down

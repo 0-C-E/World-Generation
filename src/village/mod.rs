@@ -10,7 +10,8 @@
 //!    Never reorder or reuse discriminants; they are persisted in the world
 //!    file binary format.
 //! 2. Add an arm to [`TradeResource::from_u8`] and [`TradeResource::name`].
-//! 3. The rest (placement, trade) adapts automatically.
+//! 3. Bump the constant `NUM_TRADE_RESOURCES` in `trade.rs`.
+//! 4. The rest (placement, trade) adapts automatically.
 
 pub mod placement;
 pub mod trade;
@@ -22,9 +23,11 @@ pub use trade::{compute_village_trade, VILLAGE_SCAN_RADIUS};
 // TradeResource
 // ---------------------------------------------------------------------------
 
-/// The five resources a village can offer or demand in trade.
+/// The four resources a village can offer or demand in trade.
 ///
-/// Gold is intentionally absent — it remains an active-farming node only.
+/// Favor and Gold are intentionally excluded — Favor is a passive divine
+/// resource, Gold must be actively farmed; neither is traded between villages.
+///
 /// Discriminants are part of the saved world format — **append-only**.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(u8)]
@@ -34,7 +37,6 @@ pub enum TradeResource {
     Stone = 1,
     Food  = 2,
     Metal = 3,
-    Favor = 4,
 }
 
 impl TradeResource {
@@ -44,7 +46,6 @@ impl TradeResource {
             Self::Stone => "Stone",
             Self::Food  => "Food",
             Self::Metal => "Metal",
-            Self::Favor => "Favor",
         }
     }
 
@@ -54,7 +55,6 @@ impl TradeResource {
             Self::Stone => "⛰️",
             Self::Food  => "🌾",
             Self::Metal => "⚙️",
-            Self::Favor => "✨",
         }
     }
 
@@ -69,7 +69,6 @@ impl TradeResource {
             1 => Self::Stone,
             2 => Self::Food,
             3 => Self::Metal,
-            4 => Self::Favor,
             _ => Self::Wood,
         }
     }

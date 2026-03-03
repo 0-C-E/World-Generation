@@ -1,13 +1,18 @@
 //! Village trade profile computation.
 //!
 //! Each village scans a circular neighbourhood of radius [`VILLAGE_SCAN_RADIUS`]
-//! and aggregates the biome resource modifiers across all tiles in that area.
+//! and aggregates the biome resource modifiers across all tiles in that area,
+//! considering only the four tradeable resources (Wood, Stone, Food, Metal).
+//!
 //! The resource with the highest aggregate becomes `offers`; the lowest becomes
-//! `demands`. Ties are broken deterministically via a position-seeded hash —
-//! stable across runs with no external RNG state required.
+//! `demands`. Ties are broken deterministically via a position-seeded hash so
+//! placement is stable across runs with no external RNG state required.
 
 use crate::biome::Biome;
 use super::{TradeResource, VillageTrade};
+
+/// Number of tradeable resources. Must equal the number of `TradeResource` variants.
+const NUM_TRADE_RESOURCES: usize = 4; // Wood, Stone, Food, Metal
 
 /// Scan radius in tiles around a village centre.
 ///
@@ -32,9 +37,9 @@ pub const VILLAGE_SCAN_RADIUS: i32 = 4;
 ///
 /// # Guarantee: `offers != demands`
 ///
-/// If the scan produces identical aggregates for every resource (all totals
-/// equal), the function still returns two distinct resources by forcing
-/// `demands` to the second resource in the hashed ordering.
+/// The function always returns two distinct resources, even when all totals
+/// are equal, by excluding the `offers` winner from the `demands` candidate
+/// pool before tie-breaking.
 pub fn compute_village_trade(
     vx:     usize,
     vy:     usize,
@@ -45,8 +50,9 @@ pub fn compute_village_trade(
     let map_w = if map_h > 0 { biomes[0].len() } else { return None; };
     let r = VILLAGE_SCAN_RADIUS;
 
-    // Aggregate biome modifiers across the circular neighbourhood.
-    let mut totals = [0i32; 5]; // [wood, stone, food, metal, favor]
+    // Aggregate only the four tradeable biome modifiers: wood, stone, food, metal.
+    // Favor (index 4) is deliberately excluded.
+    let mut totals = [0i32; NUM_TRADE_RESOURCES];
 
     for dy in -r..=r {
         for dx in -r..=r {
@@ -64,23 +70,22 @@ pub fn compute_village_trade(
             totals[1] += m.stone as i32;
             totals[2] += m.food  as i32;
             totals[3] += m.metal as i32;
-            totals[4] += m.favor as i32;
         }
     }
 
     let max_val = *totals.iter().max()?;
     let min_val = *totals.iter().min()?;
 
-    let max_candidates: Vec<usize> = (0..5)
+    let max_candidates: Vec<usize> = (0..NUM_TRADE_RESOURCES)
         .filter(|&i| totals[i] == max_val)
         .collect();
-    let min_candidates: Vec<usize> = (0..5)
+    let min_candidates: Vec<usize> = (0..NUM_TRADE_RESOURCES)
         .filter(|&i| totals[i] == min_val)
         .collect();
 
     let offers_idx = tie_break(&max_candidates, vx, vy, seed, 0x0F3D_5EED);
 
-    // Ensure demands != offers even when all totals are equal.
+    // Exclude `offers` from the demands pool so they are always distinct.
     let filtered_min: Vec<usize> = min_candidates
         .iter()
         .copied()
@@ -88,8 +93,10 @@ pub fn compute_village_trade(
         .collect();
 
     let demands_idx = if filtered_min.is_empty() {
-        // All five resources are perfectly equal — pick any other resource.
-        let others: Vec<usize> = (0..5).filter(|&i| i != offers_idx).collect();
+        // All four resources are equal — pick any resource other than offers.
+        let others: Vec<usize> = (0..NUM_TRADE_RESOURCES)
+            .filter(|&i| i != offers_idx)
+            .collect();
         tie_break(&others, vx, vy, seed, 0xDA4D_5EED)
     } else {
         tie_break(&filtered_min, vx, vy, seed, 0xDA4D_5EED)
@@ -105,10 +112,8 @@ pub fn compute_village_trade(
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Pick one element from `candidates` deterministically using a
-/// position-seeded hash. Different `salt` values produce independent choices.
-///
-/// Uses a Murmur3-inspired finaliser for good avalanche at low cost.
+/// Pick one element from `candidates` deterministically using a position-seeded
+/// hash. Different `salt` values produce independent choices.
 fn tie_break(candidates: &[usize], x: usize, y: usize, seed: u32, salt: u32) -> usize {
     if candidates.len() == 1 {
         return candidates[0];

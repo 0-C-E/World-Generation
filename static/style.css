@@ -1,4 +1,149 @@
-/* ── Village popup ─────────────────────────────────────────────────────── */
+/* ── Reset & layout ────────────────────────────────────────────────────── */
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #0a1628;
+}
+
+#map {
+    width: 100%;
+    height: 100%;
+    background: #0a1628;
+}
+
+/* ── Night mode ─────────────────────────────────────────────────────────── */
+
+.leaflet-tile-pane.night {
+    filter: brightness(0.45) saturate(0.6) hue-rotate(195deg);
+}
+
+/* ── Night toggle button ────────────────────────────────────────────────── */
+
+#btn-night {
+    position: fixed;
+    bottom: 20px;
+    right: 14px;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 8px;
+    color: #fff;
+    font-size: 18px;
+    width: 38px;
+    height: 38px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+#btn-night:hover {
+    background: rgba(0, 0, 0, 0.85);
+}
+
+/* ── Loading indicator ──────────────────────────────────────────────────── */
+
+#loading {
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.75);
+    color: #fff;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font: 13px system-ui, sans-serif;
+    pointer-events: none;
+}
+
+/* ── Island icons ───────────────────────────────────────────────────────── */
+
+.island-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: #fff;
+    font: bold 12px/1 system-ui, sans-serif;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.island-icon-spawn {
+    background: #e74c3c !important;
+    font-size: 10px !important;
+    padding: 2px 6px;
+    border-radius: 10px !important;
+    width: auto !important;
+    height: auto !important;
+    white-space: nowrap;
+}
+
+/* ── City popup ─────────────────────────────────────────────────────────── */
+
+.city-popup .leaflet-popup-content {
+    margin: 0;
+}
+
+.city-popup-inner {
+    font: 13px/1.5 system-ui, sans-serif;
+    padding: 8px 10px;
+    min-width: 180px;
+}
+
+.city-popup-title {
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 2px;
+}
+
+.city-popup-sub {
+    color: #666;
+    font-size: 11px;
+    margin-bottom: 6px;
+}
+
+table.city-res {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+table.city-res td {
+    padding: 1px 3px;
+}
+
+table.city-res td:last-child {
+    text-align: right;
+}
+
+.res-pos {
+    color: #27ae60;
+    font-weight: 600;
+}
+
+.res-neg {
+    color: #c0392b;
+    font-weight: 600;
+}
+
+.res-zero {
+    color: #999;
+}
+
+.res-gold {
+    color: #d4a017;
+    font-weight: 700;
+}
+
+/* ── Village popup ──────────────────────────────────────────────────────── */
 
 .village-popup .leaflet-popup-content {
     margin: 0;
