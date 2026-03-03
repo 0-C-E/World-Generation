@@ -1,6 +1,6 @@
 # World Generator
 
-A procedural world generator written in Rust, designed as the foundation for **[0 C.E.](https://github.com/0-C-E)** -- an open-source ancient world strategy game (MMORTS). It generates a 10,000 × 10,000 tile ocean-and-islands map complete with terrain, biomes, cities, resource economies, and island boundaries. The generated world is explored via a zoomable web-based map viewer.
+A procedural world generator written in Rust, designed as the foundation for **[0 C.E.](https://github.com/0-C-E)** -- an open-source ancient world strategy game (MMORTS). It generates a 10,000 * 10,000 tile ocean-and-islands map complete with terrain, biomes, cities, resource economies, and island boundaries. The generated world is explored via a zoomable web-based map viewer.
 
 ## Features
 
@@ -204,7 +204,7 @@ The file uses a custom binary format (magic bytes: `WGCH`). All values are **lit
    ```bash
    cargo run --release
    ```
-   This creates `world.world` with default 10,000×10,000 tiles and random seed.
+   This creates `world.world` with default 10,000*10,000 tiles and random seed.
 
 3. **Start the viewer**
    ```bash
@@ -285,8 +285,8 @@ src/                      Source code directory
 ├── island.rs             Island metadata discovery and representation
 ├── world.rs              High-level World facade with chunk caching
 ├── save.rs               Chunked binary .world format (writer + reader)
-├── tile.rs               256×256 PNG tile renderer (standard + debug modes)
-├── font.rs               Minimal 5×7 bitmap font for debug overlays
+├── tile.rs               256*256 PNG tile renderer (standard + debug modes)
+├── font.rs               Minimal 5*7 bitmap font for debug overlays
 └── bin/
     └── viewer.rs         HTTP server for interactive web-based map viewer
 
@@ -326,8 +326,6 @@ All dependencies are stable and mature. The build uses `cargo` for package manag
 
 ## DevContainer support
 
-## DevContainer support
-
 For VS Code users, a DevContainer configuration (`.devcontainer/`) is included:
 
 - **Base image**: `rust:alpine3.22`
@@ -342,9 +340,9 @@ To use: Install the [Dev Containers extension](https://marketplace.visualstudio.
 - **Elevation generation**: Dominated by Perlin noise computation; `rayon` parallelizes this
 - **Chunk compression**: `flate2` uses multiple threads where possible
 - **Tile rendering**: On-demand PNG encoding is fast enough for interactive viewing
-- **Island discovery**: Flood-fill and bounding-box computation are O(width × height)
+- **Island discovery**: Flood-fill and bounding-box computation are O(width * height)
 
-Full world generation (10k×10k) takes ~20–30 seconds on modern hardware (release build).
+Full world generation (10k*10k) takes ~20–30 seconds on modern hardware (release build).
 
 ## Contributing
 
