@@ -52,7 +52,7 @@ struct TileRegion {
 /// - **Gold veins**: Thin yellow lines showing gold deposit locations
 ///
 /// Debug tiles are not cached and are re-rendered on every request,
-/// ensuring fresh visualization of any underlying data changesom level.
+/// ensuring fresh visualization of any underlying data changes at any zoom level.
 ///
 /// # Tile coordinates
 /// At zoom level 0, the entire world is a single 256x256 tile.
