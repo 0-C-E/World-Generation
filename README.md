@@ -40,17 +40,17 @@ The generation pipeline is modular and data-driven:
 
 ```mermaid
 flowchart TD
-    A[Elevation generation<br/>(Perlin noise)]
-    B[Terrain classification<br/>(Water / Land / FarLand)]
-    C[Region labeling<br/>(Flood-fill → Islands)]
-    D[Water body detection<br/>(Connected components)]
-    E[Ocean distance field<br/>(For village placement)]
-    F[City placement<br/>(Coastal search + minimum spacing)]
-    G[Island filtering<br/>(Discard too-small islands)]
-    H[Biome classification<br/>(6 noise layers → 16 types)]
-    I[City resource computation<br/>(Per-city modifiers + gold)]
-    J[Village placement<br/>(Island-based distribution)]
-    K[Binary serialization<br/>(Chunks + compression)]
+    A["Elevation generation<br/>(Perlin noise)"]
+    B["Terrain classification<br/>(Water / Land / FarLand)"]
+    C["Region labeling<br/>(Flood-fill → Islands)"]
+    D["Water body detection<br/>(Connected components)"]
+    E["Ocean distance field<br/>(For village placement)"]
+    F["City placement<br/>(Coastal search + minimum spacing)"]
+    G["Island filtering<br/>(Discard too-small islands)"]
+    H["Biome classification<br/>(6 noise layers → 16 types)"]
+    I["City resource computation<br/>(Per-city modifiers + gold)"]
+    J["Village placement<br/>(Island-based distribution)"]
+    K["Binary serialization<br/>(Chunks + compression)"]
 
     A --> B
     B --> C
