@@ -175,7 +175,7 @@ pub fn save_world_chunked(path: &str, data: &WorldData) -> io::Result<()> {
         write_u8(&mut f, cr.dominant_biome)?;
     }
 
-    // Villages (format version 2)
+    // Villages
     // Layout per village: x(2) y(2) region_id(4) biome(1) offers(1) demands(1) = 11 bytes
     write_u32(&mut f, data.villages.len() as u32)?;
     for v in &data.villages {
