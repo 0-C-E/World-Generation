@@ -4,8 +4,12 @@
 //! slippy-map tile URLs (`/tile/{z}/{x}/{y}.png`).
 //!
 //! Uses a two-phase approach that is borrow-checker friendly:
-//! 1. `ensure_chunk` (mutable) for every chunk the tile overlaps.
-//! 2. Sample pixels via `chunk` (shared ref) -- no further I/O.
+//! 1. Pre-load (`ensure_chunk`) all required chunks into the cache.
+//! 2. Sample pixels via `chunk()` method with shared borrows once cached.
+//!
+//! Rendering modes:
+//! - **Standard**: Biome colors with elevation shading (used by web viewer).
+//! - **Debug**: Adds tile grid, coordinate labels, and gold vein overlay (for dev/debugging).
 
 use crate::biome::{Biome, GoldVeinSampler};
 use crate::font::draw_text;
@@ -13,26 +17,60 @@ use crate::terrain::Terrain;
 use crate::world::World;
 
 /// Side length of a tile image in pixels.
+///
+/// All tiles are square; this is both width and height.
 pub const TILE_SIZE: u32 = 256;
 
-/// The world-coordinate region a single tile covers.
+/// The world-coordinate region that a single tile image covers.
+///
+/// Used to map pixel coordinates within a tile to world coordinates
+/// for sampling elevation, terrain, and biome data.
 struct TileRegion {
+    /// World X coordinate of tile's left edge
     x_start: f64,
+    /// World Y coordinate of tile's top edge
     y_start: f64,
+    /// Width of tile region in world coordinates
     width: f64,
+    /// Height of tile region in world coordinates
     height: f64,
 }
 
-/// Render a single map tile at zoom level `z`, tile coordinates `(tx, ty)`.
+/// Render a single map tile at the given zoom level and coordinates.
 ///
-/// Returns a PNG image or `None` if the coordinates are out of range.
+/// # Arguments
+/// - `world`: Mutable reference to world (needed for chunk loading)
+/// - `z`: Zoom level (higher = more zoomed in, more detail)
+/// - `tx`, `ty`: Tile coordinates in the slippy-map system
+///
+/// # Returns
+/// `Some(png_bytes)` if tile wordinate grid, boundaries, and gold vein overlay.
+///
+/// Includes visual aids for development:
+/// - **Grid**: Tile boundaries and chunk edges
+/// - **Coordinates**: X, Y position labels
+/// - **Gold veins**: Thin yellow lines showing gold deposit locations
+///
+/// Debug tiles are not cached and are re-rendered on every request,
+/// ensuring fresh visualization of any underlying data changesom level.
+///
+/// # Tile coordinates
+/// At zoom level 0, the entire world is a single 256x256 tile.
+/// At zoom level z, the world is divided into 2^z × 2^z tiles.
 pub fn render_tile(world: &mut World, z: u32, tx: u32, ty: u32) -> Option<Vec<u8>> {
     let (pixels, _) = render_base(world, z, tx, ty)?;
     Some(encode_png(&pixels, TILE_SIZE, TILE_SIZE))
 }
 
-/// Render a debug tile with colored borders, crosshairs, and coordinate labels
-/// overlaid on the normal tile content.
+/// Render a debug tile with coordinate grid, boundaries, and gold vein overlay.
+///
+/// Includes visual aids for development:
+/// - **Grid**: Tile boundaries and chunk edges
+/// - **Coordinates**: X, Y position labels
+/// - **Gold veins**: Thin yellow lines showing gold deposit locations
+///
+/// Debug tiles are not cached and are re-rendered on every request,
+/// ensuring fresh visualization of any underlying data changes.
 pub fn render_debug_tile(world: &mut World, z: u32, tx: u32, ty: u32) -> Option<Vec<u8>> {
     let seed = world.config().seed;
     let (mut pixels, region) = render_base(world, z, tx, ty)?;
@@ -45,8 +83,14 @@ pub fn render_debug_tile(world: &mut World, z: u32, tx: u32, ty: u32) -> Option<
 // Shared rendering core
 // ---------------------------------------------------------------------------
 
-/// Build the raw RGB pixel buffer for a tile, sampling terrain and elevation
-/// from the world's chunks.
+/// Shared rendering core - produces the base RGB pixel buffer for a tile.
+///
+/// Renders biome colors with elevation-based shading. This is the first phase
+/// of rendering; output can then be modified with overlays (grid, coordinates, gold).
+///
+/// # Returns
+/// `Some((pixels, region))` with the raw RGB buffer and the tile's world-coordinate region,
+/// or `None` if coordinates are invalid for the zoom level.
 fn render_base(world: &mut World, z: u32, tx: u32, ty: u32) -> Option<(Vec<u8>, TileRegion)> {
     let tiles_per_axis = 1u32 << z;
     let max_zoom = world.config().max_zoom();
@@ -224,24 +268,43 @@ fn draw_gold_overlay(pixels: &mut [u8], world: &World, region: &TileRegion, seed
 // ---------------------------------------------------------------------------
 
 /// Write an RGB pixel into the tile buffer (bounds-checked).
+///
+/// Ensures writes don't go out of bounds. Silently ignores out-of-bounds
+/// writes to handle edge cases gracefully.
 fn set_pixel(pixels: &mut [u8], x: u32, y: u32, color: [u8; 3]) {
-    let off = ((y * TILE_SIZE + x) * 3) as usize;
-    if off + 2 < pixels.len() {
-        pixels[off] = color[0];
-        pixels[off + 1] = color[1];
-        pixels[off + 2] = color[2];
+    let offset = ((y * TILE_SIZE + x) * 3) as usize;
+    if offset + 2 < pixels.len() {
+        pixels[offset] = color[0];
+        pixels[offset + 1] = color[1];
+        pixels[offset + 2] = color[2];
     }
 }
 
 /// Encode raw RGB pixels into a PNG image.
+///
+/// Returns the PNG byte buffer on success, or an empty buffer on encoding errors.
+/// This graceful degradation ensures failed tiles don't crash the server.
 fn encode_png(pixels: &[u8], width: u32, height: u32) -> Vec<u8> {
-    let mut buf = Vec::new();
+    let mut buffer = Vec::new();
+
+    // Create and configure PNG encoder
     {
-        let mut encoder = png::Encoder::new(&mut buf, width, height);
+        let mut encoder = png::Encoder::new(&mut buffer, width, height);
         encoder.set_color(png::ColorType::Rgb);
         encoder.set_depth(png::BitDepth::Eight);
-        let mut writer = encoder.write_header().expect("PNG header");
-        writer.write_image_data(pixels).expect("PNG data");
+
+        // Write PNG header
+        let Ok(mut writer) = encoder.write_header() else {
+            eprintln!("Warning: Failed to write PNG header for tile {}x{}", width, height);
+            return Vec::new();
+        };
+
+        // Write image data
+        if let Err(e) = writer.write_image_data(pixels) {
+            eprintln!("Warning: Failed to write PNG image data: {}", e);
+            return Vec::new();
+        }
     }
-    buf
+
+    buffer
 }

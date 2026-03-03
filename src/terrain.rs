@@ -1,12 +1,37 @@
-//! Terrain classification and region labeling.
+//! Terrain classification, region labeling, and distance field computation.
 //!
-//! After elevation is generated, every tile is classified as [`Water`],
-//! [`Land`], or [`FarLand`] (decorative terrain beyond the playable area).
-//! Connected land tiles are then grouped into numbered regions via flood-fill
-//! so that each island gets a unique label.
+//! # Overview
 //!
-//! [`compute_ocean_distances`] produces a per-tile distance-to-water map used
-//! by village placement to find genuinely inland positions.
+//! This module converts a continuous elevation grid into discrete terrain categories
+//! and discovers islands via flood-fill. It also computes ocean distance fields used
+//! for village placement.
+//!
+//! # Terrain types
+//!
+//! Every tile is classified into one of three types:
+//! - **Water**: Depth zones (elevation < threshold)
+//! - **Land**: Playable area with cities and villages
+//! - **FarLand**: Decorative border beyond the playable radius
+//!
+//! # Island discovery
+//!
+//! A standard flood-fill algorithm labels all connected `Land` tiles with unique
+//! region IDs. Each region represents one island. The algorithm:
+//! 1. Scans the map left-to-right, top-to-bottom
+//! 2. When an unlabeled `Land` tile is found, fills the entire connected component
+//! 3. Assigns a new region ID and continues
+//!
+//! Result: `region_labels[y][x]` gives the island ID (0 = non-land).
+//!
+//! # Water body detection
+//!
+//! Similar to island detection, but for water regions. Used to enforce minimum
+//! water body size for city placement (ensures cities are on "real" oceans, not puddles).
+//!
+//! # Ocean distance field
+//!
+//! Computes distance from each tile to the nearest water or FarLand boundary.
+//! Used by village placement to keep villages genuinely inland.
 
 use std::collections::VecDeque;
 
@@ -14,13 +39,17 @@ use std::collections::VecDeque;
 // Terrain enum
 // ---------------------------------------------------------------------------
 
-/// The three broad terrain categories for each tile.
+/// The three broad terrain categories partitioning the world.
+///
+/// These categories drive downstream logic (city placement, biome assignment, etc.).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Terrain {
+    /// Ocean and lakes (not playable)
     Water = 0,
+    /// Playable landmass (receives cities, villages, biomes)
     Land = 1,
-    /// Decorative land beyond the playable radius.
+    /// Decorative terrain beyond the playable area (not part of gameplay)
     FarLand = 2,
 }
 
@@ -46,11 +75,22 @@ impl Terrain {
 // Terrain classification
 // ---------------------------------------------------------------------------
 
-/// Assign a [`Terrain`] category to every tile.
+/// Assign terrain type to every tile based on elevation and distance from center.
 ///
-/// * Elevation below `water_threshold` -> [`Water`](Terrain::Water)
-/// * Distance from center > `playable_radius + farland_margin` -> [`FarLand`](Terrain::FarLand)
-/// * Everything else -> [`Land`](Terrain::Land)
+/// # Classification rules
+///
+/// For each tile at `(x, y)`:
+/// 1. If `elevation[y][x] < water_threshold` → [`Water`](Terrain::Water)
+/// 2. Else if distance from center > `playable_radius + farland_margin` → [`FarLand`](Terrain::FarLand)
+/// 3. Else → [`Land`](Terrain::Land)
+///
+/// The center is at `(map_size/2, map_size/2)`. Distance is Euclidean.
+///
+/// # Parameters
+///
+/// - `water_threshold`: Height above which tiles become land (typically 0.55)
+/// - `playable_radius`: Maximum distance from center for `Land` tiles
+/// - `farland_margin`: Gap between playable area and decorative border
 pub fn classify_terrain(
     elevation: &[Vec<f64>],
     map_size: usize,
@@ -85,8 +125,24 @@ pub fn classify_terrain(
 // Region labeling
 // ---------------------------------------------------------------------------
 
-/// Flood-fill label all connected [`Land`] tiles into numbered regions
-/// (1, 2, 3, ...). Water and FarLand tiles keep label 0.
+/// Flood-fill all connected [`Land`](Terrain::Land) tiles into numbered regions.
+///
+/// # Algorithm
+///
+/// Uses breadth-first search (BFS) via a queue:
+/// 1. Scan all tiles
+/// 2. When an unlabeled `Land` tile Found, initiate flood-fill
+/// 3. BFS expands to all 4-connected neighbors
+/// 4. All reached tiles get the same region ID
+/// 5. Increment region ID and continue scanning
+///
+/// # Result
+///
+/// `labels[y][x]` contains:
+/// - `0` if the tile is Water or FarLand
+/// - Unique integer (1, 2, 3, ...) if the tile is Land
+///
+/// All Land tiles in the same connected component share the same label (island).
 pub fn label_regions(terrain: &[Vec<Terrain>], map_size: usize) -> Vec<Vec<usize>> {
     let mut labels = vec![vec![0usize; map_size]; map_size];
     let mut current_label = 1;
@@ -215,6 +271,25 @@ fn flood_fill_water(
 ///
 /// This is the foundation for inland village placement: a village at distance
 /// `d` is guaranteed to have `d` Land tiles between it and the ocean.
+/// Compute per-tile distance to nearest water or FarLand boundary.
+///
+/// # Purpose
+///
+/// Used by village placement to ensure villages are placed genuinely inland,
+/// away from ocean edges. The distance field uses Chebyshev distance
+/// (also called Chessboard distance: `max(|dx|, |dy|)`).
+///
+/// # Algorithm
+///
+/// Uses a multi-pass BFS:
+/// 1. Seed the queue with all Water and FarLand tiles (distance = 0)
+/// 2. Expand to neighbors, incrementing distance
+/// 3. Each Land tile gets the shortest distance to any ocean/border tile
+///
+/// # Returns
+///
+/// A 2D grid where each Land tile contains its distance to nearest water boundary.
+/// Water and FarLand tiles are set to 0 (already at the boundary).
 pub fn compute_ocean_distances(terrain: &[Vec<Terrain>], map_size: usize) -> Vec<Vec<u32>> {
     let mut dist = vec![vec![u32::MAX; map_size]; map_size];
     let mut queue = VecDeque::with_capacity(map_size * 4);
