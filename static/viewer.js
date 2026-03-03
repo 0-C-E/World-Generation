@@ -235,13 +235,6 @@ function buildVillagePopup(vx, vy, rid, offers, demands, biome) {
         + demandIcon + ' ' + demands
         + '</span></div>';
     html += '</div>';
-
-    // Base rate
-    html += '<div class="village-rate">'
-        + 'Base rate: <strong>' + rate + ' u/h</strong>'
-        + '</div>';
-
-    html += '</div>';
     return html;
 }
 
