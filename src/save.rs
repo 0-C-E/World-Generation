@@ -469,8 +469,8 @@ fn read_config(r: &mut impl Read) -> io::Result<WorldConfig> {
         // Village params not stored in binary (tunable at generation time only)
         village_alpha: 1.2,
         village_beta:  0.60,
-        village_min_ocean_distance: 8,
-        village_spacing: 7,
+        village_min_ocean_distance: 12,
+        village_spacing: 30,
     })
 }
 
