@@ -44,7 +44,7 @@ struct TileRegion {
 /// - `tx`, `ty`: Tile coordinates in the slippy-map system
 ///
 /// # Returns
-/// `Some(png_bytes)` if tile wordinate grid, boundaries, and gold vein overlay.
+/// `Some(png_bytes)` if tile coordinate grid, boundaries, and gold vein overlay.
 ///
 /// Includes visual aids for development:
 /// - **Grid**: Tile boundaries and chunk edges
