@@ -1,8 +1,7 @@
 //! High-level world access.
 //!
 //! [`World`] wraps a [`ChunkedWorldReader`](crate::save::ChunkedWorldReader)
-//! with a chunk cache and lazy island discovery, providing a single entry
-//! point for all game queries against a generated world.
+//! with a chunk cache and lazy island discovery.
 
 use std::collections::HashMap;
 use std::io;
@@ -11,57 +10,28 @@ use crate::biome::CityResources;
 use crate::config::WorldConfig;
 use crate::island::{self, Island};
 use crate::save::{ChunkData, ChunkedWorldReader};
+use crate::village::Village;
 
-/// A loaded world with cached chunk data and lazy island discovery.
-///
-/// # Two-phase access pattern
-///
-/// Methods that may perform I/O (`ensure_chunk`, `ensure_islands_computed`)
-/// take `&mut self`. Pure accessors (`chunk`, `islands`, `region_label_at_cached`)
-/// take `&self`. Call the `ensure_*` methods first, then read freely.
 pub struct World {
-    reader: ChunkedWorldReader,
+    reader:      ChunkedWorldReader,
     chunk_cache: HashMap<(u32, u32), ChunkData>,
-    islands: Option<Vec<Island>>,
+    islands:     Option<Vec<Island>>,
 }
 
 impl World {
     /// Open a world file and read its header.
     pub fn open(path: &str) -> io::Result<Self> {
         let reader = ChunkedWorldReader::open(path)?;
-        Ok(Self {
-            reader,
-            chunk_cache: HashMap::new(),
-            islands: None,
-        })
+        Ok(Self { reader, chunk_cache: HashMap::new(), islands: None })
     }
 
     // -- Header accessors ---------------------------------------------------
 
-    /// The generation configuration stored in the file header.
-    pub fn config(&self) -> &WorldConfig {
-        &self.reader.header.config
-    }
-
-    /// World width in tiles.
-    pub fn width(&self) -> u32 {
-        self.reader.header.width
-    }
-
-    /// World height in tiles.
-    pub fn height(&self) -> u32 {
-        self.reader.header.height
-    }
-
-    /// Number of chunk columns.
-    pub fn chunks_x(&self) -> u32 {
-        self.reader.header.chunks_x
-    }
-
-    /// Number of chunk rows.
-    pub fn chunks_y(&self) -> u32 {
-        self.reader.header.chunks_y
-    }
+    pub fn config(&self) -> &WorldConfig { &self.reader.header.config }
+    pub fn width(&self) -> u32  { self.reader.header.width }
+    pub fn height(&self) -> u32 { self.reader.header.height }
+    pub fn chunks_x(&self) -> u32 { self.reader.header.chunks_x }
+    pub fn chunks_y(&self) -> u32 { self.reader.header.chunks_y }
 
     /// All city slot positions from the file header.
     pub fn city_slots(&self) -> &[(u32, u32)] {
@@ -71,6 +41,11 @@ impl World {
     /// Per-city aggregated resource profiles, parallel to [`city_slots`](Self::city_slots).
     pub fn city_resources(&self) -> &[CityResources] {
         &self.reader.header.city_resources
+    }
+    /// All villages stored in the world file header.
+    /// Returns an empty slice for version-1 files.
+    pub fn villages(&self) -> &[Village] {
+        &self.reader.header.villages
     }
 
     // -- Chunk management ---------------------------------------------------
@@ -99,10 +74,7 @@ impl World {
     /// This is a no-op if islands have already been computed.
     pub fn ensure_islands_computed(&mut self) {
         if self.islands.is_none() {
-            self.islands = Some(island::discover_islands(
-                &self.reader,
-                &mut self.chunk_cache,
-            ));
+            self.islands = Some(island::discover_islands(&self.reader, &mut self.chunk_cache));
         }
     }
 

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">
+  <!-- outer glow ring -->
+  <circle cx="11" cy="11" r="10" fill="#F39C12" opacity="0.25"/>
+  <!-- main circle -->
+  <circle cx="11" cy="11" r="8.5" fill="#E67E22" stroke="#fff" stroke-width="1.5"/>
+  <!-- hut body -->
+  <rect x="7" y="11" width="8" height="5" rx="0.5" fill="#fff"/>
+  <!-- hut roof (triangle) -->
+  <polygon points="5.5,11.5 11,5.5 16.5,11.5" fill="#fff"/>
+  <!-- door -->
+  <rect x="9.5" y="13" width="3" height="3" rx="0.4" fill="#E67E22"/>
+</svg>

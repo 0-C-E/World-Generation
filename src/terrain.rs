@@ -4,6 +4,9 @@
 //! [`Land`], or [`FarLand`] (decorative terrain beyond the playable area).
 //! Connected land tiles are then grouped into numbered regions via flood-fill
 //! so that each island gets a unique label.
+//!
+//! [`compute_ocean_distances`] produces a per-tile distance-to-water map used
+//! by village placement to find genuinely inland positions.
 
 use std::collections::VecDeque;
 
@@ -197,6 +200,50 @@ fn flood_fill_water(
 }
 
 // ---------------------------------------------------------------------------
+// Ocean distance map
+// ---------------------------------------------------------------------------
+
+/// Compute the minimum tile distance from each tile to the nearest
+/// [`Water`](Terrain::Water) or [`FarLand`](Terrain::FarLand) tile.
+///
+/// Uses multi-source BFS seeded from every boundary tile simultaneously,
+/// running in O(W × H) — identical complexity to a single flood-fill.
+///
+/// Results:
+/// * Water / FarLand tiles → distance 0
+/// * Land tiles → Manhattan BFS distance to nearest boundary tile
+///
+/// This is the foundation for inland village placement: a village at distance
+/// `d` is guaranteed to have `d` Land tiles between it and the ocean.
+pub fn compute_ocean_distances(terrain: &[Vec<Terrain>], map_size: usize) -> Vec<Vec<u32>> {
+    let mut dist = vec![vec![u32::MAX; map_size]; map_size];
+    let mut queue = VecDeque::with_capacity(map_size * 4);
+
+    // Seed from all non-Land tiles simultaneously.
+    for y in 0..map_size {
+        for x in 0..map_size {
+            if terrain[y][x] != Terrain::Land {
+                dist[y][x] = 0;
+                queue.push_back((x, y));
+            }
+        }
+    }
+
+    // Standard BFS — each tile is processed at most once.
+    while let Some((x, y)) = queue.pop_front() {
+        let d = dist[y][x] + 1;
+        for (nx, ny) in neighbors_4(x, y, map_size) {
+            if dist[ny][nx] == u32::MAX {
+                dist[ny][nx] = d;
+                queue.push_back((nx, ny));
+            }
+        }
+    }
+
+    dist
+}
+
+// ---------------------------------------------------------------------------
 // Neighbor helpers
 // ---------------------------------------------------------------------------
 
@@ -209,22 +256,10 @@ pub fn neighbors_4(
     let mut buf = [(0usize, 0usize); 4];
     let mut len = 0;
 
-    if x > 0 {
-        buf[len] = (x - 1, y);
-        len += 1;
-    }
-    if x + 1 < map_size {
-        buf[len] = (x + 1, y);
-        len += 1;
-    }
-    if y > 0 {
-        buf[len] = (x, y - 1);
-        len += 1;
-    }
-    if y + 1 < map_size {
-        buf[len] = (x, y + 1);
-        len += 1;
-    }
+    if x > 0             { buf[len] = (x - 1, y); len += 1; }
+    if x + 1 < map_size  { buf[len] = (x + 1, y); len += 1; }
+    if y > 0             { buf[len] = (x, y - 1); len += 1; }
+    if y + 1 < map_size  { buf[len] = (x, y + 1); len += 1; }
 
     buf.into_iter().take(len)
 }

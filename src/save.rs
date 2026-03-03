@@ -1,13 +1,14 @@
 //! World file I/O -- chunked binary format.
 //!
-//! The file stores the world as independently-compressed chunks so the
-//! viewer can load tiles on demand. The header records all
-//! [`WorldConfig`](crate::config::WorldConfig) parameters plus a chunk
-//! index that maps `(cx, cy)` to byte offsets for O(1) random access.
+//! ## Format version 1
 //!
-//! Each chunk stores 6 bytes per tile (terrain, elevation, region label,
-//! biome). Per-city [`CityResources`](crate::biome::CityResources) are
-//! stored in the header.
+//! Header layout (in order):
+//!   magic(4) · version(1) · config · width(2) · height(2) · chunk_size(2)
+//!   · chunks_x(2) · chunks_y(2) · num_cities(4) · city_slots · city_resources
+//!   · num_villages(4) · villages · chunk_index · chunk_data
+//!
+//! Villages were added to version 1 before any production worlds were generated,
+//! so there is no legacy v1 format without villages.
 
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write};
@@ -19,6 +20,7 @@ use flate2::Compression;
 use crate::biome::CityResources;
 use crate::config::WorldConfig;
 use crate::terrain::Terrain;
+use crate::village::{Village, VillageTrade, TradeResource};
 
 // ---------------------------------------------------------------------------
 // Magic & version
@@ -48,6 +50,8 @@ pub struct WorldData {
     pub biomes: Vec<u8>,
     /// Per-city aggregated resource profile, parallel to `city_slots`.
     pub city_resources: Vec<CityResources>,
+    /// All villages, sorted by (region_id, y, x).
+    pub villages: Vec<Village>,
 }
 
 /// A single decompressed chunk.
@@ -73,6 +77,8 @@ pub struct ChunkedWorldHeader {
     pub format_version: u8,
     /// Per-city aggregated resource profiles, parallel to `city_slots`.
     pub city_resources: Vec<CityResources>,
+    /// Empty when loading a version-1 file.
+    pub villages: Vec<Village>,
 }
 
 /// Random-access reader for the chunked world file.
@@ -100,23 +106,17 @@ pub fn build_world_data(
     city_slots: &[(usize, usize)],
     biomes: Vec<Vec<u8>>,
     city_resources: Vec<CityResources>,
+    villages: Vec<Village>,
     config: WorldConfig,
 ) -> WorldData {
     let height = elevation.len() as u32;
-    let width = elevation[0].len() as u32;
+    let width  = elevation[0].len() as u32;
 
     let flat_elevation: Vec<f32> = elevation.iter().flatten().map(|&e| e as f32).collect();
-    let flat_terrain: Vec<u8> = terrain.iter().flatten().map(|t| t.to_u8()).collect();
-    let flat_regions: Vec<u32> = region_labels
-        .iter()
-        .flatten()
-        .map(|&r| r as u32)
-        .collect();
-    let flat_biomes: Vec<u8> = biomes.into_iter().flatten().collect();
-    let city_slots = city_slots
-        .iter()
-        .map(|&(x, y)| (x as u32, y as u32))
-        .collect();
+    let flat_terrain: Vec<u8>    = terrain.iter().flatten().map(|t| t.to_u8()).collect();
+    let flat_regions: Vec<u32>   = region_labels.iter().flatten().map(|&r| r as u32).collect();
+    let flat_biomes: Vec<u8>     = biomes.into_iter().flatten().collect();
+    let city_slots = city_slots.iter().map(|&(x, y)| (x as u32, y as u32)).collect();
 
     WorldData {
         config,
@@ -128,6 +128,7 @@ pub fn build_world_data(
         city_slots,
         biomes: flat_biomes,
         city_resources,
+        villages,
     }
 }
 
@@ -137,11 +138,11 @@ pub fn build_world_data(
 
 /// Serialize a [`WorldData`] into the chunked binary format.
 pub fn save_world_chunked(path: &str, data: &WorldData) -> io::Result<()> {
-    let width = data.width;
-    let height = data.height;
+    let width      = data.width;
+    let height     = data.height;
     let chunk_size = data.config.chunk_size as u32;
-    let chunks_x = (width + chunk_size - 1) / chunk_size;
-    let chunks_y = (height + chunk_size - 1) / chunk_size;
+    let chunks_x   = (width  + chunk_size - 1) / chunk_size;
+    let chunks_y   = (height + chunk_size - 1) / chunk_size;
     let num_chunks = (chunks_x * chunks_y) as usize;
 
     let mut f = BufWriter::new(File::create(path)?);
@@ -174,10 +175,24 @@ pub fn save_world_chunked(path: &str, data: &WorldData) -> io::Result<()> {
         write_u8(&mut f, cr.dominant_biome)?;
     }
 
+    // Villages (format version 2)
+    // Layout per village: x(2) y(2) region_id(4) base_rate(2) biome(1)
+    //                     offers(1) demands(1) = 13 bytes
+    write_u32(&mut f, data.villages.len() as u32)?;
+    for v in &data.villages {
+        write_u16(&mut f, v.x)?;
+        write_u16(&mut f, v.y)?;
+        write_u32(&mut f, v.region_id)?;
+        write_u16(&mut f, v.base_rate)?;
+        write_u8(&mut f, v.biome)?;
+        write_u8(&mut f, v.trade.offers.to_u8())?;
+        write_u8(&mut f, v.trade.demands.to_u8())?;
+    }
+
     // -- Chunk index (placeholder, back-patched later) ----------------------
     let index_offset = f.stream_position()?;
     for _ in 0..num_chunks {
-        f.write_all(&[0u8; 16])?; // offset(8) + compressed(4) + uncompressed(4)
+        f.write_all(&[0u8; 16])?;
     }
 
     // -- Chunk data ---------------------------------------------------------
@@ -185,15 +200,15 @@ pub fn save_world_chunked(path: &str, data: &WorldData) -> io::Result<()> {
 
     for cy in 0..chunks_y {
         for cx in 0..chunks_x {
-            let cw = chunk_size.min(width - cx * chunk_size);
+            let cw = chunk_size.min(width  - cx * chunk_size);
             let ch = chunk_size.min(height - cy * chunk_size);
             let pixels = (cw * ch) as usize;
 
             let mut raw = Vec::with_capacity(pixels * 6);
             for ly in 0..ch {
                 for lx in 0..cw {
-                    let gx = (cx * chunk_size + lx) as usize;
-                    let gy = (cy * chunk_size + ly) as usize;
+                    let gx  = (cx * chunk_size + lx) as usize;
+                    let gy  = (cy * chunk_size + ly) as usize;
                     let idx = gy * width as usize + gx;
                     raw.push(data.terrain[idx]);
                     let elev_u16 = (data.elevation[idx].clamp(0.0, 1.0) * 65535.0) as u16;
@@ -206,10 +221,9 @@ pub fn save_world_chunked(path: &str, data: &WorldData) -> io::Result<()> {
             let uncompressed_len = raw.len() as u32;
             let mut encoder = DeflateEncoder::new(Vec::new(), Compression::fast());
             encoder.write_all(&raw)?;
-            let compressed = encoder.finish()?;
+            let compressed     = encoder.finish()?;
             let compressed_len = compressed.len() as u32;
-
-            let offset = f.stream_position()?;
+            let offset         = f.stream_position()?;
             f.write_all(&compressed)?;
             entries.push((offset, compressed_len, uncompressed_len));
         }
@@ -240,14 +254,10 @@ pub fn read_seed_from_file(path: &str) -> Option<u32> {
 
     let mut magic = [0u8; 4];
     f.read_exact(&mut magic).ok()?;
-    if &magic != MAGIC {
-        return None;
-    }
+    if &magic != MAGIC { return None; }
 
     let version = read_u8(&mut f).ok()?;
-    if version == 0 || version > FORMAT_VERSION {
-        return None;
-    }
+    if version == 0 || version > FORMAT_VERSION { return None; }
 
     let config = read_config(&mut f).ok()?;
     Some(config.seed)
@@ -262,10 +272,7 @@ impl ChunkedWorldReader {
         let mut magic = [0u8; 4];
         f.read_exact(&mut magic)?;
         if &magic != MAGIC {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "not a WGCH file",
-            ));
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "not a WGCH file"));
         }
 
         // Version
@@ -279,10 +286,10 @@ impl ChunkedWorldReader {
 
         // Config
         let mut config = read_config(&mut f)?;
-        let width = read_u16(&mut f)? as u32;
-        let height = read_u16(&mut f)? as u32;
+        let width      = read_u16(&mut f)? as u32;
+        let height     = read_u16(&mut f)? as u32;
         let chunk_size = read_u16(&mut f)?;
-        config.chunk_size = chunk_size; // stored separately in the file
+        config.chunk_size = chunk_size;
         let chunks_x = read_u16(&mut f)? as u32;
         let chunks_y = read_u16(&mut f)? as u32;
 
@@ -299,23 +306,40 @@ impl ChunkedWorldReader {
         let mut city_resources = Vec::with_capacity(num_cities as usize);
         for _ in 0..num_cities {
             city_resources.push(CityResources {
-                wood: read_i16(&mut f)?,
-                stone: read_i16(&mut f)?,
-                food: read_i16(&mut f)?,
-                metal: read_i16(&mut f)?,
-                favor: read_i16(&mut f)?,
-                gold_nodes: read_u8(&mut f)?,
+                wood:           read_i16(&mut f)?,
+                stone:          read_i16(&mut f)?,
+                food:           read_i16(&mut f)?,
+                metal:          read_i16(&mut f)?,
+                favor:          read_i16(&mut f)?,
+                gold_nodes:     read_u8(&mut f)?,
                 dominant_biome: read_u8(&mut f)?,
+            });
+        }
+
+        // Villages — always present in format version 1.
+        let num_villages = read_u32(&mut f)?;
+        let mut villages = Vec::with_capacity(num_villages as usize);
+        for _ in 0..num_villages {
+            villages.push(Village {
+                x:         read_u16(&mut f)?,
+                y:         read_u16(&mut f)?,
+                region_id: read_u32(&mut f)?,
+                base_rate: read_u16(&mut f)?,
+                biome:     read_u8(&mut f)?,
+                trade: VillageTrade {
+                    offers:  TradeResource::from_u8(read_u8(&mut f)?),
+                    demands: TradeResource::from_u8(read_u8(&mut f)?),
+                },
             });
         }
 
         // Chunk index
         let num_chunks = (chunks_x * chunks_y) as usize;
-        let mut index = Vec::with_capacity(num_chunks);
+        let mut index  = Vec::with_capacity(num_chunks);
         for _ in 0..num_chunks {
             index.push(ChunkIndexEntry {
-                offset: read_u64(&mut f)?,
-                compressed_len: read_u32(&mut f)?,
+                offset:           read_u64(&mut f)?,
+                compressed_len:   read_u32(&mut f)?,
                 uncompressed_len: read_u32(&mut f)?,
             });
         }
@@ -329,29 +353,23 @@ impl ChunkedWorldReader {
             city_slots,
             format_version: version,
             city_resources,
+            villages,
         };
 
-        Ok(Self {
-            header,
-            index,
-            path: path.to_owned(),
-        })
+        Ok(Self { header, index, path: path.to_owned() })
     }
 
     /// Decompress and return the chunk at `(cx, cy)`.
     pub fn load_chunk(&self, cx: u32, cy: u32) -> io::Result<ChunkData> {
-        let h = &self.header;
+        let h          = &self.header;
         let chunk_size = h.config.chunk_size as u32;
         if cx >= h.chunks_x || cy >= h.chunks_y {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!(
-                    "invalid chunk coordinates ({}, {}) for grid {}x{}",
-                    cx, cy, h.chunks_x, h.chunks_y
-                ),
+                format!("invalid chunk ({cx},{cy}) for grid {}x{}", h.chunks_x, h.chunks_y),
             ));
         }
-        let idx = (cy * h.chunks_x + cx) as usize;
+        let idx   = (cy * h.chunks_x + cx) as usize;
         let entry = &self.index[idx];
 
         let mut f = BufReader::new(File::open(&self.path)?);
@@ -363,14 +381,14 @@ impl ChunkedWorldReader {
         let mut raw = vec![0u8; entry.uncompressed_len as usize];
         DeflateDecoder::new(&compressed[..]).read_exact(&mut raw)?;
 
-        let cw = chunk_size.min(h.width - cx * chunk_size);
+        let cw = chunk_size.min(h.width  - cx * chunk_size);
         let ch = chunk_size.min(h.height - cy * chunk_size);
         let pixels = (cw * ch) as usize;
 
-        let mut terrain = Vec::with_capacity(pixels);
-        let mut elevation = Vec::with_capacity(pixels);
+        let mut terrain      = Vec::with_capacity(pixels);
+        let mut elevation    = Vec::with_capacity(pixels);
         let mut region_labels = Vec::with_capacity(pixels);
-        let mut biomes = Vec::with_capacity(pixels);
+        let mut biomes       = Vec::with_capacity(pixels);
 
         let mut cursor = Cursor::new(&raw);
         for _ in 0..pixels {
@@ -391,14 +409,7 @@ impl ChunkedWorldReader {
             biomes.push(b[0]);
         }
 
-        Ok(ChunkData {
-            width: cw,
-            height: ch,
-            terrain,
-            elevation,
-            region_labels,
-            biomes,
-        })
+        Ok(ChunkData { width: cw, height: ch, terrain, elevation, region_labels, biomes })
     }
 }
 
@@ -427,24 +438,24 @@ fn write_config(w: &mut impl Write, c: &WorldConfig) -> io::Result<()> {
 
 /// Read all generation parameters. Types match the wire format directly.
 fn read_config(r: &mut impl Read) -> io::Result<WorldConfig> {
-    let map_size = read_u16(r)?;
-    let scale = read_f32(r)?;
-    let octaves = read_u8(r)?;
-    let persistence = read_f32(r)?;
-    let lacunarity = read_f32(r)?;
-    let seed = read_u32(r)?;
-    let water_threshold = read_f32(r)?;
-    let city_spacing = read_u8(r)?;
+    let map_size              = read_u16(r)?;
+    let scale                 = read_f32(r)?;
+    let octaves               = read_u8(r)?;
+    let persistence           = read_f32(r)?;
+    let lacunarity            = read_f32(r)?;
+    let seed                  = read_u32(r)?;
+    let water_threshold       = read_f32(r)?;
+    let city_spacing          = read_u8(r)?;
     let min_city_slots_per_island = read_u8(r)?;
-    let playable_radius = read_u16(r)?;
-    let farland_margin = read_u16(r)?;
-    let min_water_body_size = read_u16(r)?;
-    let min_land_neighbors = read_u8(r)?;
-    let min_water_neighbors = read_u8(r)?;
+    let playable_radius       = read_u16(r)?;
+    let farland_margin        = read_u16(r)?;
+    let min_water_body_size   = read_u16(r)?;
+    let min_land_neighbors    = read_u8(r)?;
+    let min_water_neighbors   = read_u8(r)?;
 
     Ok(WorldConfig {
         map_size,
-        chunk_size: 0, // filled by the header reader (stored separately)
+        chunk_size: 0, // filled by the header reader
         seed,
         scale,
         octaves,
@@ -458,6 +469,11 @@ fn read_config(r: &mut impl Read) -> io::Result<WorldConfig> {
         min_water_body_size,
         min_land_neighbors,
         min_water_neighbors,
+        // Village params not stored in binary (tunable at generation time only)
+        village_alpha: 1.2,
+        village_beta:  0.60,
+        village_min_ocean_distance: 8,
+        village_spacing: 7,
     })
 }
 
@@ -465,54 +481,16 @@ fn read_config(r: &mut impl Read) -> io::Result<WorldConfig> {
 // Binary I/O helpers
 // ---------------------------------------------------------------------------
 
-fn write_u8(w: &mut impl Write, v: u8) -> io::Result<()> {
-    w.write_all(&[v])
-}
-fn write_u16(w: &mut impl Write, v: u16) -> io::Result<()> {
-    w.write_all(&v.to_le_bytes())
-}
-fn write_i16(w: &mut impl Write, v: i16) -> io::Result<()> {
-    w.write_all(&v.to_le_bytes())
-}
-fn write_u32(w: &mut impl Write, v: u32) -> io::Result<()> {
-    w.write_all(&v.to_le_bytes())
-}
-fn write_u64(w: &mut impl Write, v: u64) -> io::Result<()> {
-    w.write_all(&v.to_le_bytes())
-}
-fn write_f32(w: &mut impl Write, v: f32) -> io::Result<()> {
-    w.write_all(&v.to_le_bytes())
-}
+fn write_u8(w: &mut impl Write, v: u8)   -> io::Result<()> { w.write_all(&[v]) }
+fn write_u16(w: &mut impl Write, v: u16) -> io::Result<()> { w.write_all(&v.to_le_bytes()) }
+fn write_i16(w: &mut impl Write, v: i16) -> io::Result<()> { w.write_all(&v.to_le_bytes()) }
+fn write_u32(w: &mut impl Write, v: u32) -> io::Result<()> { w.write_all(&v.to_le_bytes()) }
+fn write_u64(w: &mut impl Write, v: u64) -> io::Result<()> { w.write_all(&v.to_le_bytes()) }
+fn write_f32(w: &mut impl Write, v: f32) -> io::Result<()> { w.write_all(&v.to_le_bytes()) }
 
-fn read_u8(r: &mut impl Read) -> io::Result<u8> {
-    let mut buf = [0u8; 1];
-    r.read_exact(&mut buf)?;
-    Ok(buf[0])
-}
-fn read_u16(r: &mut impl Read) -> io::Result<u16> {
-    let mut buf = [0u8; 2];
-    r.read_exact(&mut buf)?;
-    Ok(u16::from_le_bytes(buf))
-}
-fn read_i16(r: &mut impl Read) -> io::Result<i16> {
-    let mut buf = [0u8; 2];
-    r.read_exact(&mut buf)?;
-    Ok(i16::from_le_bytes(buf))
-}
-fn read_u32(r: &mut impl Read) -> io::Result<u32> {
-    let mut buf = [0u8; 4];
-    r.read_exact(&mut buf)?;
-    Ok(u32::from_le_bytes(buf))
-}
-
-fn read_u64(r: &mut impl Read) -> io::Result<u64> {
-    let mut buf = [0u8; 8];
-    r.read_exact(&mut buf)?;
-    Ok(u64::from_le_bytes(buf))
-}
-
-fn read_f32(r: &mut impl Read) -> io::Result<f32> {
-    let mut buf = [0u8; 4];
-    r.read_exact(&mut buf)?;
-    Ok(f32::from_le_bytes(buf))
-}
+fn read_u8(r: &mut impl Read)  -> io::Result<u8>  { let mut b = [0u8;1]; r.read_exact(&mut b)?; Ok(b[0]) }
+fn read_u16(r: &mut impl Read) -> io::Result<u16> { let mut b = [0u8;2]; r.read_exact(&mut b)?; Ok(u16::from_le_bytes(b)) }
+fn read_i16(r: &mut impl Read) -> io::Result<i16> { let mut b = [0u8;2]; r.read_exact(&mut b)?; Ok(i16::from_le_bytes(b)) }
+fn read_u32(r: &mut impl Read) -> io::Result<u32> { let mut b = [0u8;4]; r.read_exact(&mut b)?; Ok(u32::from_le_bytes(b)) }
+fn read_u64(r: &mut impl Read) -> io::Result<u64> { let mut b = [0u8;8]; r.read_exact(&mut b)?; Ok(u64::from_le_bytes(b)) }
+fn read_f32(r: &mut impl Read) -> io::Result<f32> { let mut b = [0u8;4]; r.read_exact(&mut b)?; Ok(f32::from_le_bytes(b)) }
