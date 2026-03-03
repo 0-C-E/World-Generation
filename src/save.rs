@@ -176,14 +176,12 @@ pub fn save_world_chunked(path: &str, data: &WorldData) -> io::Result<()> {
     }
 
     // Villages (format version 2)
-    // Layout per village: x(2) y(2) region_id(4) base_rate(2) biome(1)
-    //                     offers(1) demands(1) = 13 bytes
+    // Layout per village: x(2) y(2) region_id(4) biome(1) offers(1) demands(1) = 11 bytes
     write_u32(&mut f, data.villages.len() as u32)?;
     for v in &data.villages {
         write_u16(&mut f, v.x)?;
         write_u16(&mut f, v.y)?;
         write_u32(&mut f, v.region_id)?;
-        write_u16(&mut f, v.base_rate)?;
         write_u8(&mut f, v.biome)?;
         write_u8(&mut f, v.trade.offers.to_u8())?;
         write_u8(&mut f, v.trade.demands.to_u8())?;
@@ -324,7 +322,6 @@ impl ChunkedWorldReader {
                 x:         read_u16(&mut f)?,
                 y:         read_u16(&mut f)?,
                 region_id: read_u32(&mut f)?,
-                base_rate: read_u16(&mut f)?,
                 biome:     read_u8(&mut f)?,
                 trade: VillageTrade {
                     offers:  TradeResource::from_u8(read_u8(&mut f)?),

@@ -202,9 +202,3 @@ table.city-res td:last-child {
     line-height: 1;
     margin: 1px 0;
 }
-
-.village-rate {
-    font-size: 11px;
-    color: #666;
-    text-align: right;
-}

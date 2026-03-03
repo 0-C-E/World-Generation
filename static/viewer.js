@@ -157,18 +157,17 @@ function fetchVillagesForViewport() {
 function renderVillages(villages, vb) {
     villageLayer.clearLayers();
     for (let i = 0; i < villages.length; i++) {
-        //  [x, y, region_id, base_rate, offers, demands, biome]
+        //  [x, y, region_id, offers, demands, biome]
         let vx = villages[i][0];
         let vy = villages[i][1];
         let rid = villages[i][2];
-        let rate = villages[i][3];
-        let offers = villages[i][4];
-        let demands = villages[i][5];
-        let biome = villages[i][6];
+        let offers = villages[i][3];
+        let demands = villages[i][4];
+        let biome = villages[i][5];
         if (!vb.contains(L.latLng(vy, vx))) continue;
         let marker = L.marker(L.latLng(vy, vx), { icon: villageIcon });
         marker.bindPopup(
-            buildVillagePopup(vx, vy, rid, rate, offers, demands, biome),
+            buildVillagePopup(vx, vy, rid, offers, demands, biome),
             { className: 'village-popup', minWidth: 190 }
         );
         villageLayer.addLayer(marker);
@@ -209,7 +208,7 @@ function buildCityPopup(cx, cy, rid, res) {
     return html;
 }
 
-function buildVillagePopup(vx, vy, rid, rate, offers, demands, biome) {
+function buildVillagePopup(vx, vy, rid, offers, demands, biome) {
     let offerIcon = RES_ICON[offers] || '?';
     let demandIcon = RES_ICON[demands] || '?';
     let offerColor = RES_COLOR[offers] || '#333';

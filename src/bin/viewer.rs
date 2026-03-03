@@ -257,7 +257,7 @@ fn build_cities_viewport_json(world: &mut World, x0: u32, y0: u32, x1: u32, y1: 
 /// Query params: `x0`, `y0`, `x1`, `y1` (world tile coordinates).
 ///
 /// Returns a JSON array:
-/// `[[x, y, region_id, base_rate, offers_name, demands_name, biome_name], ...]`
+/// `[[x, y, region_id, offers_name, demands_name, biome_name], ...]`
 fn handle_villages_viewport(request: Request, full_url: &str, state: &mut ServerState) {
     let (x0, y0, x1, y1) = parse_bbox(full_url, state.world.width(), state.world.height());
     let json     = build_villages_viewport_json(&state.world, x0, y0, x1, y1);
@@ -278,8 +278,8 @@ fn build_villages_viewport_json(world: &World, x0: u32, y0: u32, x1: u32, y1: u3
         .map(|v| {
             let biome_name = world_generator::biome::Biome::from_u8(v.biome).name();
             format!(
-                "[{},{},{},{},\"{}\",\"{}\",\"{}\"]",
-                v.x, v.y, v.region_id, v.base_rate,
+                "[{},{},{},\"{}\",\"{}\",\"{}\"]",
+                v.x, v.y, v.region_id,
                 v.trade.offers.name(),
                 v.trade.demands.name(),
                 biome_name,

@@ -4,6 +4,12 @@
 //! ocean, specialises in the resource its biome neighbourhood produces most,
 //! and demands the resource that neighbourhood produces least.
 //!
+//! # Trade resources
+//!
+//! Only the four active-production resources (Wood, Stone, Food, Metal) are
+//! tradeable. Favor and Gold are excluded: Favor is a passive divine resource
+//! accumulated via temples, not traded; Gold is always actively farmed.
+//!
 //! # Adding a new trade resource
 //!
 //! 1. Add a variant to [`TradeResource`] — use the next available `u8`.
@@ -103,9 +109,6 @@ pub struct Village {
     pub y: u16,
     /// Region label of the island this village belongs to.
     pub region_id: u32,
-    /// Base production rate in units/hour at island level 1, player level 1.
-    /// Derived from biome modifiers and ocean distance.
-    pub base_rate: u16,
     /// Dominant biome at the village's position (for display).
     pub biome: u8,
     /// Trade profile derived from the circular biome scan.

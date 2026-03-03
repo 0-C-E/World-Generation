@@ -188,13 +188,10 @@ pub fn place_villages(
 
             let trade = compute_village_trade(cx, cy, biomes, seed)
                 .unwrap_or_default();
-            let base_rate = compute_base_rate(ocean_distances[cy][cx]);
-
             all_villages.push(Village {
                 x:         cx as u16,
                 y:         cy as u16,
                 region_id: region_id as u32,
-                base_rate,
                 biome:     biomes[cy][cx],
                 trade,
             });
@@ -204,17 +201,6 @@ pub fn place_villages(
 
     all_villages.sort_unstable_by_key(|v| (v.region_id, v.y, v.x));
     all_villages
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/// Base production rate in units/hour, independent of trade resource.
-/// Deeper inland tiles earn a small bonus (up to +20).
-fn compute_base_rate(ocean_dist: u32) -> u16 {
-    let inland_bonus = (ocean_dist.min(30) as f64 / 30.0 * 20.0) as u16;
-    (100 + inland_bonus).clamp(100, 120)
 }
 
 /// Cheap position+seed hash used to scatter equally-inland candidates.
