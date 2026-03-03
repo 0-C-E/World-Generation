@@ -165,16 +165,16 @@ The file uses a custom binary format (magic bytes: `WGCH`). All values are **lit
 ```
 +---------------------------------------------+
 |  Header                                     |
-|  +- Magic: "WGCH" (4 bytes)                |
-|  +- Version: 1 (u8)                        |
+|  +- Magic: "WGCH" (4 bytes)                 |
+|  +- Version: 1 (u8)                         |
 |  +- Config block (generation parameters)    |
 |  +- Width, Height, ChunkSize (u16 each)     |
 |  +- ChunksX, ChunksY (u16 each)             |
 |  +- NumCities (u32)                         |
 |  +- City slots: [(x: u16, y: u16); N]       |
 |  +- City resources:                         |
-|     [(wood, stone, food, metal, favor): i16, |
-|      gold_nodes: u8, dominant_biome: u8; N]  |
+|     [(wood, stone, food, metal, favor): i16,|
+|      gold_nodes: u8, dominant_biome: u8; N] |
 +---------------------------------------------+
 |  Chunk Index (one entry per chunk)          |
 |  +- [offset: u64, comp_len: u32,            |
