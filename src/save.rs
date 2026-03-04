@@ -5,7 +5,7 @@
 //! [`WorldConfig`](crate::config::WorldConfig) parameters plus a chunk
 //! index that maps `(cx, cy)` to byte offsets for O(1) random access.
 //!
-//! Each chunk stores 6 bytes per tile (terrain, elevation, region label,
+//! Each chunk stores 8 bytes per tile (terrain, elevation, region label,
 //! biome). Per-city [`CityResources`](crate::biome::CityResources) are
 //! stored in the header.
 
@@ -107,11 +107,7 @@ pub fn build_world_data(
 
     let flat_elevation: Vec<f32> = elevation.iter().flatten().map(|&e| e as f32).collect();
     let flat_terrain: Vec<u8> = terrain.iter().flatten().map(|t| t.to_u8()).collect();
-    let flat_regions: Vec<u32> = region_labels
-        .iter()
-        .flatten()
-        .map(|&r| r as u32)
-        .collect();
+    let flat_regions: Vec<u32> = region_labels.iter().flatten().map(|&r| r as u32).collect();
     let flat_biomes: Vec<u8> = biomes.into_iter().flatten().collect();
     let city_slots = city_slots
         .iter()
@@ -198,7 +194,7 @@ pub fn save_world_chunked(path: &str, data: &WorldData) -> io::Result<()> {
                     raw.push(data.terrain[idx]);
                     let elev_u16 = (data.elevation[idx].clamp(0.0, 1.0) * 65535.0) as u16;
                     raw.extend_from_slice(&elev_u16.to_le_bytes());
-                    raw.extend_from_slice(&(data.region_labels[idx] as u16).to_le_bytes());
+                    raw.extend_from_slice(&(data.region_labels[idx] as u32).to_le_bytes());
                     raw.push(data.biomes[idx]);
                 }
             }
@@ -382,9 +378,9 @@ impl ChunkedWorldReader {
             cursor.read_exact(&mut e)?;
             elevation.push(u16::from_le_bytes(e) as f32 / 65535.0);
 
-            let mut r = [0u8; 2];
+            let mut r = [0u8; 4];
             cursor.read_exact(&mut r)?;
-            region_labels.push(u16::from_le_bytes(r) as u32);
+            region_labels.push(u32::from_le_bytes(r));
 
             let mut b = [0u8; 1];
             cursor.read_exact(&mut b)?;
