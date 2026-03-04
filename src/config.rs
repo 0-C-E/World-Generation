@@ -16,14 +16,12 @@ use std::env;
 #[derive(Debug, Clone)]
 pub struct WorldConfig {
     // -- Map geometry -------------------------------------------------------
-
     /// Side length of the square world in tiles.
     pub map_size: u16,
     /// Side length of one chunk in tiles (chunks are always square).
     pub chunk_size: u16,
 
     // -- Noise / elevation --------------------------------------------------
-
     /// Perlin noise seed.
     pub seed: u32,
     /// Base frequency of the noise (higher = more detail per tile).
@@ -36,7 +34,6 @@ pub struct WorldConfig {
     pub lacunarity: f32,
 
     // -- Terrain classification ---------------------------------------------
-
     /// Elevation below this value is classified as water.
     pub water_threshold: f32,
     /// Maximum distance from the map center for the playable area.
@@ -47,7 +44,6 @@ pub struct WorldConfig {
     pub farland_margin: u16,
 
     // -- City placement -----------------------------------------------------
-
     /// Minimum tile spacing between two city slots.
     pub city_spacing: u8,
     /// Islands with fewer candidate city slots than this are excluded.
@@ -59,6 +55,25 @@ pub struct WorldConfig {
     pub min_land_neighbors: u8,
     /// Minimum number of water neighbours a tile must have to place a city.
     pub min_water_neighbors: u8,
+
+    // -- Village placement --------------------------------------------------
+    /// Alpha coefficient in the village count formula:
+    /// `villages = floor(alpha × (city_count − min_cities)^beta)`
+    ///
+    /// Increase for more villages overall (e.g. 1.5 for generous worlds).
+    pub village_alpha: f64,
+
+    /// Beta exponent in the village count formula.
+    /// 0.60 front-loads villages onto medium islands (15–30 cities).
+    /// Lower values (e.g. 0.50) slow growth; higher (e.g. 0.70) accelerate it.
+    pub village_beta: f64,
+
+    /// Minimum tile distance from any ocean or FarLand tile for a village.
+    /// Ensures villages are genuinely inland.
+    pub village_min_ocean_distance: u32,
+
+    /// Minimum Chebyshev distance between two villages on the same island.
+    pub village_spacing: u32,
 }
 
 impl Default for WorldConfig {
@@ -111,8 +126,14 @@ impl WorldConfig {
             min_water_body_size: env_u16("MIN_WATER_BODY_SIZE", 500),
             min_land_neighbors: env_u8("MIN_LAND_NEIGHBORS", 2),
             min_water_neighbors: env_u8("MIN_WATER_NEIGHBORS", 2),
+            // Village defaults
+            village_alpha: env_f64("VILLAGE_ALPHA", 1.2),
+            village_beta: env_f64("VILLAGE_BETA", 0.60),
+            village_min_ocean_distance: env_u32("VILLAGE_MIN_OCEAN_DISTANCE", 12),
+            village_spacing: env_u32("VILLAGE_SPACING", 30),
         }
     }
+
     /// Map size as `usize` -- avoids casts in hot loops.
     pub fn map_len(&self) -> usize {
         self.map_size as usize
@@ -184,7 +205,27 @@ fn env_u8(key: &str, default: u8) -> u8 {
     }
 }
 
+fn env_u32(key: &str, default: u32) -> u32 {
+    match env::var(key).ok().as_deref() {
+        Some("") | None => default,
+        Some(v) => v.parse().unwrap_or_else(|_| {
+            eprintln!("{key}: invalid value \"{v}\", using default {default}");
+            default
+        }),
+    }
+}
+
 fn env_f32(key: &str, default: f32) -> f32 {
+    match env::var(key).ok().as_deref() {
+        Some("") | None => default,
+        Some(v) => v.parse().unwrap_or_else(|_| {
+            eprintln!("{key}: invalid value \"{v}\", using default {default}");
+            default
+        }),
+    }
+}
+
+fn env_f64(key: &str, default: f64) -> f64 {
     match env::var(key).ok().as_deref() {
         Some("") | None => default,
         Some(v) => v.parse().unwrap_or_else(|_| {

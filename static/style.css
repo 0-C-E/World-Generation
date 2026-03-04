@@ -1,3 +1,5 @@
+/* ── Reset & layout ────────────────────────────────────────────────────── */
+
 html,
 body {
     margin: 0;
@@ -11,6 +13,7 @@ body {
     background: #111936;
 }
 
+/* ── Loading indicator ──────────────────────────────────────────────────── */
 #loading {
     position: fixed;
     top: 12px;
@@ -23,7 +26,7 @@ body {
     font: 13px/1.4 system-ui, sans-serif;
 }
 
-/* Night mode toggle button */
+/* ── Night toggle button ────────────────────────────────────────────────── */
 #btn-night {
     position: fixed;
     bottom: 24px;
@@ -55,10 +58,12 @@ body {
     transition: filter 0.4s ease;
 }
 
+/* ── Night mode ─────────────────────────────────────────────────────────── */
 .leaflet-tile-pane.night {
     filter: brightness(0.50) saturate(0.65) hue-rotate(10deg);
 }
 
+/* ── Island icons ───────────────────────────────────────────────────────── */
 .island-icon {
     display: flex;
     align-items: center;
@@ -94,7 +99,7 @@ body {
     white-space: nowrap;
 }
 
-/* City popup */
+/* ── City popup ──────────────────────────────────────────────────────── */
 .city-popup .leaflet-popup-content {
     margin: 0;
 }
@@ -147,4 +152,64 @@ body {
 .res-gold {
     color: #d4a017;
     font-weight: 700;
+}
+
+/* ── Village popup ──────────────────────────────────────────────────────── */
+
+.village-popup .leaflet-popup-content {
+    margin: 0;
+}
+
+.village-popup-inner {
+    font: 13px/1.5 system-ui, sans-serif;
+    padding: 8px 10px;
+    min-width: 170px;
+}
+
+.village-popup-title {
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 2px;
+}
+
+.village-popup-sub {
+    color: #666;
+    font-size: 11px;
+    margin-bottom: 8px;
+}
+
+/* Trade exchange block */
+.village-trade {
+    background: #f8f6f0;
+    border: 1px solid #e0d8c8;
+    border-radius: 6px;
+    padding: 6px 10px;
+    margin-bottom: 6px;
+}
+
+.village-trade-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2px 0;
+}
+
+.trade-label {
+    color: #888;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.trade-res {
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.village-trade-arrow {
+    text-align: center;
+    color: #aaa;
+    font-size: 16px;
+    line-height: 1;
+    margin: 1px 0;
 }

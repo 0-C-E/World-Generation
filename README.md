@@ -1,6 +1,20 @@
 # World Generator
 
-A procedural world generator written in Rust, designed as the foundation for **[0 C.E.](https://github.com/0-C-E) -- a web-based, open-source ancient world strategy game (MMORTS)**. It creates a 10,000 x 10,000 tile ocean-and-islands map complete with terrain, biomes, cities, resource economies, and island boundaries, then lets you explore it in the browser through a zoomable map viewer.
+A procedural world generator written in Rust, designed as the foundation for **[0 C.E.](https://github.com/0-C-E)** -- an open-source ancient world strategy game (MMORTS). It generates a 10,000 * 10,000 tile ocean-and-islands map complete with terrain, biomes, cities, resource economies, and island boundaries. The generated world is explored via a zoomable web-based map viewer.
+
+## Features
+
+The generator produces a fully-featured game world:
+
+- **Fractal terrain** -- Perlin noise-based heightmap with natural coastlines and mountains
+- **Island discovery** -- Automatic detection of distinct landmasses via flood-fill
+- **City placement** -- Strategic coastal positions with configurable spacing and density
+- **Biome classification** -- 16 terrain types (plains, forest, desert, mountains, etc.) with distinct resource properties
+- **Resource simulation** -- Per-city production modifiers and gold deposits
+- **Village system** -- Inland resource nodes with trade specialization (Wood, Stone, Food, Metal)
+- **Web viewer** -- Interactive Leaflet.js map with panning, zooming, and detailed overlays
+- **Efficient storage** -- Chunked and compressed binary format with O(1) random access
+- **Deterministic generation** -- Same seed always produces identical worlds
 
 ## What is this project? (The big picture)
 
@@ -20,14 +34,55 @@ Imagine games like [Grepolis](https://en.wikipedia.org/wiki/Grepolis), [0 A.D.](
 
 Rust gives us the speed to generate and serve a 100-million-tile world in under a minute, with safe memory management and no garbage collector pauses -- important for a game server that needs to stay responsive.
 
-## How it works (step by step)
+## Architecture
 
-Here's the generation pipeline:
+The generation pipeline is modular and data-driven:
 
+```mermaid
+flowchart TD
+  subgraph SG[" "]
+  direction LR
+    A["Elevation generation<br/>(Perlin noise)"]
+    B["Terrain classification<br/>(Water / Land / FarLand)"]
+    C["Region labeling<br/>(Flood-fill → Islands)"]
+    D["Water body detection<br/>(Connected components)"]
+    E["Ocean distance field<br/>(For village placement)"]
+    F["City placement<br/>(Coastal search + minimum spacing)"]
+    G["Island filtering<br/>(Discard too-small islands)"]
+    H["Biome classification<br/>(6 noise layers → 16 types)"]
+    I["City resource computation<br/>(Per-city modifiers + gold)"]
+    J["Village placement<br/>(Island-based distribution)"]
+    K["Binary serialization<br/>(Chunks + compression)"]
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+    G --> H
+    H --> I
+    I --> J
+    J --> K
+  end
 ```
-Perlin noise -> Elevation grid -> Terrain classification -> Region labeling
-  -> Water bodies -> City placement -> Biome classification -> City resources -> Save
-```
+
+### Module organization
+
+| Module | Responsibility |
+|--------|-----------------|
+| `elevation` | Fractal Brownian motion noise generation |
+| `terrain` | Classification, region/water body labeling, distance fields |
+| `city` | Coastal slot detection and island-based filtering |
+| `biome` | Multi-layer noise classification, resource definitions |
+| `village` | Inland placement and trade profile computation |
+| `island` | Island metadata and discovery from region labels |
+| `save` | Chunked binary format (compression, indexing, serialization) |
+| `tile` | PNG rendering (standard + debug modes) |
+| `world` | High-level API (file reading, chunk caching, island querying) |
+| `config` | Centralized configuration (environment-driven) |
+
+Each module is self-contained and testable, making it straightforward to modify generation rules or add new features.
 
 ### Step 1: Elevation (heightmap)
 
@@ -110,16 +165,16 @@ The file uses a custom binary format (magic bytes: `WGCH`). All values are **lit
 ```
 +---------------------------------------------+
 |  Header                                     |
-|  +- Magic: "WGCH" (4 bytes)                |
-|  +- Version: 1 (u8)                        |
+|  +- Magic: "WGCH" (4 bytes)                 |
+|  +- Version: 1 (u8)                         |
 |  +- Config block (generation parameters)    |
 |  +- Width, Height, ChunkSize (u16 each)     |
 |  +- ChunksX, ChunksY (u16 each)             |
 |  +- NumCities (u32)                         |
 |  +- City slots: [(x: u16, y: u16); N]       |
 |  +- City resources:                         |
-|     [(wood, stone, food, metal, favor): i16, |
-|      gold_nodes: u8, dominant_biome: u8; N]  |
+|     [(wood, stone, food, metal, favor): i16,|
+|      gold_nodes: u8, dominant_biome: u8; N] |
 +---------------------------------------------+
 |  Chunk Index (one entry per chunk)          |
 |  +- [offset: u64, comp_len: u32,            |
@@ -132,45 +187,46 @@ The file uses a custom binary format (magic bytes: `WGCH`). All values are **lit
 +---------------------------------------------+
 ```
 
-## Requirements
+## Quick start
 
-- **Rust toolchain** (edition 2021) with Cargo
+### Prerequisites
+- **Rust 1.70+** (use [rustup](https://rustup.rs/) to install)
 
-Or use the included **DevContainer** (Alpine Linux + Rust) which handles setup automatically in VS Code.
+### Steps
 
-## Building
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/0-C-E/World-Generation.git
+   cd World-Generation
+   ```
 
-```bash
-cargo build --release
+2. **Generate a world** (debug mode is faster for iteration, release for full speed)
+   ```bash
+   cargo run --release
+   ```
+   This creates `world.world` with default 10,000*10,000 tiles and random seed.
+
+3. **Start the viewer**
+   ```bash
+   cargo run --release --bin viewer
+   ```
+   Open **http://localhost:8080** in your browser to explore.
+
+### Custom configuration
+
+Create a `.env` file in the project root:
+```env
+MAP_SIZE=5000          # Smaller world for faster testing
+SEED=12345             # Reproducible world for debugging
+CITY_SPACING=8         # Fewer cities, larger islands
 ```
 
-## Usage
-
-### 1. Generate a world
-
+Then regenerate:
 ```bash
-cargo run --release
+cargo run --release    # Picks up new config from .env
 ```
 
-Produces a `world.world` file containing the full map data. If the file already exists with the same seed, generation is skipped.
-
-### 2. Start the web viewer
-
-```bash
-cargo run --release --bin viewer
-```
-
-To load a different file:
-
-```bash
-cargo run --release --bin viewer -- path/to/other.world
-```
-
-Open **http://localhost:8080** in your browser to explore the generated world. The viewer pre-computes island and city data at startup, then serves tiles on demand.
-
-A **debug viewer** is available at **http://localhost:8080/debug** with tile grid borders, coordinate overlays, and gold vein visualization.
-
-## Configuration
+## Building from source
 
 All parameters are read from **environment variables**, with `.env` file support via `dotenvy`. No recompilation needed -- just edit `.env` and restart.
 
@@ -209,50 +265,96 @@ The viewer also supports:
 ## Project structure
 
 ```
-src/
-  biome.rs         Biome classification, resource modifiers, gold veins, city resources
-  city.rs          Coastal city slot placement and filtering
-  color.rs         Biome/elevation to RGB color mapping
-  config.rs        WorldConfig -- every tunable parameter in one place
-  elevation.rs     Perlin noise heightmap generation
-  font.rs          Minimal 5x7 bitmap font for debug overlays
-  island.rs        Island discovery (bounding boxes, centroids, city counts)
-  lib.rs           Module declarations and re-exports
-  main.rs          Generation CLI entry point
-  save.rs          Chunked binary .world format (writer + reader)
-  terrain.rs       Terrain classification + flood-fill region labeling
-  tile.rs          256x256 PNG tile renderer (normal + debug modes)
-  world.rs         World facade -- wraps the file reader with a chunk cache
-  bin/
-    viewer.rs      HTTP tile server (tiles, cities, islands, outlines, debug)
+src/                      Source code directory
+├── main.rs               Generation CLI -- orchestrates the entire pipeline
+├── lib.rs                Module declarations and re-exports
+├── config.rs             WorldConfig -- all tunable parameters and environment loading
+├── elevation.rs          Fractal Brownian motion (fBm) Perlin noise generation
+├── terrain.rs            Classification, flood-fill region labeling, distance maps
+├── city.rs               Coastal city slot detection and island-based filtering
+├── biome/
+│   ├── mod.rs            Biome types and classification rules
+│   ├── generation.rs     Multi-layer noise-based biome assignment
+│   ├── city_resources.rs Per-city resource aggregation
+│   ├── gold.rs           Gold vein procedural generation
+│   └── defs/             Biome definitions (Ocean, Forest, Desert, etc.)
+├── village/
+│   ├── mod.rs            Village type and trade specialization
+│   ├── placement.rs      Island-based village distribution
+│   └── trade.rs          Trade profile computation
+├── island.rs             Island metadata discovery and representation
+├── world.rs              High-level World facade with chunk caching
+├── save.rs               Chunked binary .world format (writer + reader)
+├── tile.rs               256*256 PNG tile renderer (standard + debug modes)
+├── font.rs               Minimal 5*7 bitmap font for debug overlays
+└── bin/
+    └── viewer.rs         HTTP server for interactive web-based map viewer
 
-static/
-  index.html       Leaflet.js map viewer frontend
-  style.css        Viewer styles (island icons, city popups, resource colors)
-  viewer.js        Map interaction, spatial index, city/island layer management
-  night-mode.js
-  debug.html       Debug viewer frontend
-  debug.css        Debug panel styles
-  debug.js         Debug panel with tile grid info and coordinate tracking
-  city-icon.svg    City marker icon
+static/                   Web assets
+├── index.html            Leaflet.js map viewer
+├── style.css             Viewer styling
+├── viewer.js             Map interaction and data layer management
+├── night-mode.js         Dark mode toggle
+├── debug.html            Debug tools interface
+├── debug.css             Debug panel styling
+├── debug.js              Tile grid info and coordinate tracking
+├── city-icon.svg         City marker SVG
+└── village-icon.svg      Village marker SVG
 ```
+
+The codebase follows a **modular single-responsibility** architecture:
+- Each module handles one aspect of generation (noise, terrain, cities, etc.)
+- Modules communicate via simple data structures (2D grids, vectors, maps)
+- No global state or circular dependencies
+- Easy to test, modify, or extend individual generators
 
 ## Dependencies
 
-| Crate | Purpose |
-|-------|---------|
-| `noise` | Perlin noise generation |
-| `rand` | Random number generation / seeding |
-| `rayon` | Parallel iteration (used during generation) |
-| `flate2` | Deflate compression for `.world` chunk data |
-| `png` | PNG encoding for map tiles |
-| `tiny_http` | Lightweight HTTP server for the viewer |
-| `dotenvy` | Load `.env` files for configuration |
+This project uses the following Rust crates:
 
-## DevContainer
+| Crate | Purpose | Usage |
+|-------|---------|-------|
+| `noise` | Perlin noise generation | Fractal Brownian motion for elevation/biome |
+| `rand` | Random numbers and RNG | Seeding and stochastic generation |
+| `rayon` | Data parallelism | Parallel tile processing during generation |
+| `flate2` | Deflate compression | Chunk compression in .world binary format |
+| `png` | PNG encoding | Tile image rendering for web viewer |
+| `tiny_http` | Lightweight HTTP server | Web viewer backend |
+| `dotenvy` | `.env` file loader | Configuration management |
 
-The project includes a DevContainer configuration (`.devcontainer/`) for VS Code:
+All dependencies are stable and mature. The build uses `cargo` for package management.
+
+## DevContainer support
+
+For VS Code users, a DevContainer configuration (`.devcontainer/`) is included:
 
 - **Base image**: `rust:alpine3.22`
-- **Extensions**: rust-analyzer, CodeLLDB, Even Better TOML, Dependi
-- **Post-create**: runs `cargo build` automatically
+- **Pre-installed**: Rust toolchain, development tools
+- **Extensions**: rust-analyzer, CodeLLDB debugger, Even Better TOML
+- **Auto-setup**: Runs `cargo build` on first start
+
+To use: Install the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) and reopen the folder in a container.
+
+## Performance notes
+
+- **Elevation generation**: Dominated by Perlin noise computation; `rayon` parallelizes this
+- **Chunk compression**: `flate2` uses multiple threads where possible
+- **Tile rendering**: On-demand PNG encoding is fast enough for interactive viewing
+- **Island discovery**: Flood-fill and bounding-box computation are O(width * height)
+
+Full world generation (10k*10k) takes ~20–30 seconds on modern hardware (release build).
+
+## Contributing
+
+This is an open-source project. Contributions are welcome:
+
+- **Bug fixes**: File issues or submit PRs
+- **Performance**: Profile-guided optimizations are appreciated
+- **New features**: Biome types, resources, generation algorithms
+- **Documentation**: Clarifications and examples
+
+See [0 C.E.](https://github.com/0-C-E) for the broader game project.
+
+## License
+
+[See LICENSE file](LICENSE)
