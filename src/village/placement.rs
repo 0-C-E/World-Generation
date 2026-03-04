@@ -29,10 +29,10 @@
 
 use std::collections::{HashMap, HashSet};
 
+use super::{compute_village_trade, Village};
 use crate::biome::Biome;
 use crate::config::WorldConfig;
 use crate::terrain::Terrain;
-use super::{Village, compute_village_trade};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -84,22 +84,26 @@ pub fn village_count_for_island(city_count: u32, min_cities: u32, alpha: f64, be
 /// * `city_slots`        — all accepted city positions (used as exclusion set)
 /// * `config`            — world configuration (spacing, alpha, beta, seed)
 pub fn place_villages(
-    terrain:            &[Vec<Terrain>],
-    biomes:             &[Vec<u8>],
-    region_labels:      &[Vec<usize>],
-    ocean_distances:    &[Vec<u32>],
+    terrain: &[Vec<Terrain>],
+    biomes: &[Vec<u8>],
+    region_labels: &[Vec<usize>],
+    ocean_distances: &[Vec<u32>],
     region_city_counts: &HashMap<usize, u32>,
-    city_slots:         &[(usize, usize)],
-    config:             &WorldConfig,
+    city_slots: &[(usize, usize)],
+    config: &WorldConfig,
 ) -> Vec<Village> {
     let map_h = terrain.len();
-    let map_w = if map_h > 0 { terrain[0].len() } else { return vec![] };
+    let map_w = if map_h > 0 {
+        terrain[0].len()
+    } else {
+        return vec![];
+    };
 
-    let min_ocean  = config.village_min_ocean_distance;
-    let spacing    = config.village_spacing as usize;
-    let alpha      = config.village_alpha;
-    let beta       = config.village_beta;
-    let seed       = config.seed;
+    let min_ocean = config.village_min_ocean_distance;
+    let spacing = config.village_spacing as usize;
+    let alpha = config.village_alpha;
+    let beta = config.village_beta;
+    let seed = config.seed;
     let min_cities = config.min_city_slots_per_island as u32;
 
     // Build city exclusion set for O(1) lookup.
@@ -119,16 +123,26 @@ pub fn place_villages(
 
     for y in 0..map_h {
         for x in 0..map_w {
-            if terrain[y][x] != Terrain::Land { continue; }
-            if ocean_distances[y][x] < min_ocean { continue; }
-            if city_set.contains(&(x, y)) { continue; }
+            if terrain[y][x] != Terrain::Land {
+                continue;
+            }
+            if ocean_distances[y][x] < min_ocean {
+                continue;
+            }
+            if city_set.contains(&(x, y)) {
+                continue;
+            }
             let region_id = region_labels[y][x];
-            if region_id == 0 || !region_city_counts.contains_key(&region_id) { continue; }
+            if region_id == 0 || !region_city_counts.contains_key(&region_id) {
+                continue;
+            }
             let biome = Biome::from_u8(biomes[y][x]);
-            if matches!(biome,
-                Biome::Ocean | Biome::Coast | Biome::Beach
-                | Biome::DeepHarbor | Biome::FarLand
-            ) { continue; }
+            if matches!(
+                biome,
+                Biome::Ocean | Biome::Coast | Biome::Beach | Biome::DeepHarbor | Biome::FarLand
+            ) {
+                continue;
+            }
             by_region.entry(region_id).or_default().push((x, y));
         }
     }
@@ -142,7 +156,9 @@ pub fn place_villages(
     for (region_id, candidates) in by_region {
         let city_count = *region_city_counts.get(&region_id).unwrap_or(&0);
         let target = village_count_for_island(city_count, min_cities, alpha, beta) as usize;
-        if target == 0 || candidates.is_empty() { continue; }
+        if target == 0 || candidates.is_empty() {
+            continue;
+        }
 
         // Weighted shuffle: biases inland tiles toward the front while still
         // scattering them spatially across the island.
@@ -170,29 +186,34 @@ pub fn place_villages(
         // Sort descending: most-inland / highest-scored first.
         // For equal scores (very rare), use (y, x) for strict determinism.
         scored.sort_unstable_by(|&(ax, ay, as_), &(bx, by, bs)| {
-            bs.cmp(&as_).then_with(|| ay.cmp(&by)).then_with(|| ax.cmp(&bx))
+            bs.cmp(&as_)
+                .then_with(|| ay.cmp(&by))
+                .then_with(|| ax.cmp(&bx))
         });
 
         // Greedy Chebyshev spacing pass.
         let mut placed: Vec<(usize, usize)> = Vec::with_capacity(target);
 
         for (cx, cy, _) in scored {
-            if placed.len() >= target { break; }
+            if placed.len() >= target {
+                break;
+            }
             let too_close = placed.iter().any(|&(px, py)| {
                 let dx = (cx as isize - px as isize).unsigned_abs();
                 let dy = (cy as isize - py as isize).unsigned_abs();
                 // Chebyshev: max(dx, dy) < spacing
                 dx.max(dy) < spacing
             });
-            if too_close { continue; }
+            if too_close {
+                continue;
+            }
 
-            let trade = compute_village_trade(cx, cy, biomes, seed)
-                .unwrap_or_default();
+            let trade = compute_village_trade(cx, cy, biomes, seed).unwrap_or_default();
             all_villages.push(Village {
-                x:         cx as u16,
-                y:         cy as u16,
+                x: cx as u16,
+                y: cy as u16,
                 region_id: region_id as u32,
-                biome:     biomes[cy][cx],
+                biome: biomes[cy][cx],
                 trade,
             });
             placed.push((cx, cy));

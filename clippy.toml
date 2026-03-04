@@ -1,0 +1,4 @@
+# Clippy configuration for 0ce-world-generation
+# Enforces CLAUDE.md standards
+cognitive-complexity-threshold = 30
+too-many-arguments-threshold = 7

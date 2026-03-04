@@ -323,18 +323,26 @@ pub fn compute_ocean_distances(terrain: &[Vec<Terrain>], map_size: usize) -> Vec
 // ---------------------------------------------------------------------------
 
 /// 4-connected neighbors of `(x, y)` inside a `map_size x map_size` grid.
-pub fn neighbors_4(
-    x: usize,
-    y: usize,
-    map_size: usize,
-) -> impl Iterator<Item = (usize, usize)> {
+pub fn neighbors_4(x: usize, y: usize, map_size: usize) -> impl Iterator<Item = (usize, usize)> {
     let mut buf = [(0usize, 0usize); 4];
     let mut len = 0;
 
-    if x > 0             { buf[len] = (x - 1, y); len += 1; }
-    if x + 1 < map_size  { buf[len] = (x + 1, y); len += 1; }
-    if y > 0             { buf[len] = (x, y - 1); len += 1; }
-    if y + 1 < map_size  { buf[len] = (x, y + 1); len += 1; }
+    if x > 0 {
+        buf[len] = (x - 1, y);
+        len += 1;
+    }
+    if x + 1 < map_size {
+        buf[len] = (x + 1, y);
+        len += 1;
+    }
+    if y > 0 {
+        buf[len] = (x, y - 1);
+        len += 1;
+    }
+    if y + 1 < map_size {
+        buf[len] = (x, y + 1);
+        len += 1;
+    }
 
     buf.into_iter().take(len)
 }

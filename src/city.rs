@@ -89,8 +89,7 @@ pub fn find_city_slots(
                 continue;
             }
 
-            let (land, water_count, water_positions) =
-                count_neighbors(terrain, x, y, map_size);
+            let (land, water_count, water_positions) = count_neighbors(terrain, x, y, map_size);
 
             if land >= min_land
                 && water_count >= min_water

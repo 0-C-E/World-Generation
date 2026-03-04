@@ -47,11 +47,17 @@ fn main() {
     // Skip generation if a world file with the same seed already exists
     if let Some(existing_seed) = save::read_seed_from_file(OUTPUT_PATH) {
         if existing_seed == config.seed {
-            println!("Skipping generation: {} already exists with seed {}", OUTPUT_PATH, existing_seed);
+            println!(
+                "Skipping generation: {} already exists with seed {}",
+                OUTPUT_PATH, existing_seed
+            );
             println!("To regenerate, delete the file or change SEED.");
             return;
         }
-        println!("Seed changed ({} → {}), regenerating world...", existing_seed, config.seed);
+        println!(
+            "Seed changed ({} → {}), regenerating world...",
+            existing_seed, config.seed
+        );
     }
 
     println!(
@@ -103,7 +109,10 @@ fn main() {
             config.min_city_slots_per_island as usize,
         )
     });
-    println!("  Kept {} city slots after filtering small islands", filtered_cities.len());
+    println!(
+        "  Kept {} city slots after filtering small islands",
+        filtered_cities.len()
+    );
 
     // Phase 8: Classify terrain into 16 biome types using multiple noise layers
     let biomes = timed("Biomes", || {
@@ -138,7 +147,9 @@ fn main() {
         let cities_with_gold = city_resources.iter().filter(|r| r.gold_nodes > 0).count();
         println!(
             "  {}/{} cities have gold deposits ({} total nodes)",
-            cities_with_gold, filtered_cities.len(), total_gold_nodes
+            cities_with_gold,
+            filtered_cities.len(),
+            total_gold_nodes
         );
     }
 
@@ -178,11 +189,13 @@ fn main() {
     });
 
     // Phase 13: Write everything to disk in chunked, compressed format
-    timed("Save", || match save::save_world_chunked(OUTPUT_PATH, &world_data) {
-        Ok(()) => {}
-        Err(e) => {
-            eprintln!("Error: Failed to save world to {}: {}", OUTPUT_PATH, e);
-            std::process::exit(1);
+    timed("Save", || {
+        match save::save_world_chunked(OUTPUT_PATH, &world_data) {
+            Ok(()) => {}
+            Err(e) => {
+                eprintln!("Error: Failed to save world to {}: {}", OUTPUT_PATH, e);
+                std::process::exit(1);
+            }
         }
     });
 

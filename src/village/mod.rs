@@ -39,27 +39,27 @@ pub use trade::{compute_village_trade, VILLAGE_SCAN_RADIUS};
 #[repr(u8)]
 pub enum TradeResource {
     #[default]
-    Wood  = 0,
+    Wood = 0,
     Stone = 1,
-    Food  = 2,
+    Food = 2,
     Metal = 3,
 }
 
 impl TradeResource {
     pub fn name(self) -> &'static str {
         match self {
-            Self::Wood  => "Wood",
+            Self::Wood => "Wood",
             Self::Stone => "Stone",
-            Self::Food  => "Food",
+            Self::Food => "Food",
             Self::Metal => "Metal",
         }
     }
 
     pub fn icon(self) -> &'static str {
         match self {
-            Self::Wood  => "🌲",
+            Self::Wood => "🌲",
             Self::Stone => "⛰️",
-            Self::Food  => "🌾",
+            Self::Food => "🌾",
             Self::Metal => "⚙️",
         }
     }
@@ -88,7 +88,7 @@ impl TradeResource {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct VillageTrade {
     /// Resource produced most in the surrounding biomes → exported.
-    pub offers:  TradeResource,
+    pub offers: TradeResource,
     /// Resource produced least in the surrounding biomes → imported.
     pub demands: TradeResource,
 }

@@ -33,8 +33,8 @@
 //! ```
 
 use noise::{NoiseFn, Perlin};
-use rand::{RngExt, SeedableRng};
 use rand::rngs::StdRng;
+use rand::{RngExt, SeedableRng};
 
 use crate::config::WorldConfig;
 
@@ -70,6 +70,7 @@ pub fn generate(config: &WorldConfig) -> Vec<Vec<f64>> {
 
     let mut elevation = vec![vec![0.0; size]; size];
 
+    #[allow(clippy::needless_range_loop)]
     for y in 0..size {
         for x in 0..size {
             let mut freq = 1.0 / scale;

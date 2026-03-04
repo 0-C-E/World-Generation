@@ -217,9 +217,7 @@ fn draw_debug_overlays(pixels: &mut [u8], z: u32, tx: u32, ty: u32, region: &Til
     let line3 = format!("   to: {x_end}-{y_end}");
     let line4 = format!("region: {:.1}x{:.1}", region.width, region.height);
 
-    let labels: [(u32, &str); 4] = [
-        (5, &line1), (15, &line2), (25, &line3), (35, &line4),
-    ];
+    let labels: [(u32, &str); 4] = [(5, &line1), (15, &line2), (25, &line3), (35, &line4)];
     for (y, text) in labels {
         draw_text(pixels, TILE_SIZE, 6, y + 1, text, [0, 0, 0]);
         draw_text(pixels, TILE_SIZE, 5, y, text, [255, 255, 255]);
@@ -295,7 +293,10 @@ fn encode_png(pixels: &[u8], width: u32, height: u32) -> Vec<u8> {
 
         // Write PNG header
         let Ok(mut writer) = encoder.write_header() else {
-            eprintln!("Warning: Failed to write PNG header for tile {}x{}", width, height);
+            eprintln!(
+                "Warning: Failed to write PNG header for tile {}x{}",
+                width, height
+            );
             return Vec::new();
         };
 

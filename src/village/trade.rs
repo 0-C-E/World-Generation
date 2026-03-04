@@ -8,8 +8,8 @@
 //! `demands`. Ties are broken deterministically via a position-seeded hash so
 //! placement is stable across runs with no external RNG state required.
 
-use crate::biome::Biome;
 use super::{TradeResource, VillageTrade};
+use crate::biome::Biome;
 
 /// Number of tradeable resources. Must equal the number of `TradeResource` variants.
 const NUM_TRADE_RESOURCES: usize = 4; // Wood, Stone, Food, Metal
@@ -41,13 +41,17 @@ pub const VILLAGE_SCAN_RADIUS: i32 = 4;
 /// are equal, by excluding the `offers` winner from the `demands` candidate
 /// pool before tie-breaking.
 pub fn compute_village_trade(
-    vx:     usize,
-    vy:     usize,
+    vx: usize,
+    vy: usize,
     biomes: &[Vec<u8>],
-    seed:   u32,
+    seed: u32,
 ) -> Option<VillageTrade> {
     let map_h = biomes.len();
-    let map_w = if map_h > 0 { biomes[0].len() } else { return None; };
+    let map_w = if map_h > 0 {
+        biomes[0].len()
+    } else {
+        return None;
+    };
     let r = VILLAGE_SCAN_RADIUS;
 
     // Aggregate only the four tradeable biome modifiers: wood, stone, food, metal.
@@ -64,11 +68,10 @@ pub fn compute_village_trade(
             if tx < 0 || ty < 0 || tx >= map_w as i32 || ty >= map_h as i32 {
                 continue;
             }
-            let m = Biome::from_u8(biomes[ty as usize][tx as usize])
-                .resource_modifiers();
-            totals[0] += m.wood  as i32;
+            let m = Biome::from_u8(biomes[ty as usize][tx as usize]).resource_modifiers();
+            totals[0] += m.wood as i32;
             totals[1] += m.stone as i32;
-            totals[2] += m.food  as i32;
+            totals[2] += m.food as i32;
             totals[3] += m.metal as i32;
         }
     }
@@ -103,7 +106,7 @@ pub fn compute_village_trade(
     };
 
     Some(VillageTrade {
-        offers:  TradeResource::from_u8(offers_idx as u8),
+        offers: TradeResource::from_u8(offers_idx as u8),
         demands: TradeResource::from_u8(demands_idx as u8),
     })
 }

@@ -40,16 +40,16 @@ const LAYER_LACUNARITY: f64 = 2.0;
 /// `pub(crate)` so [`generation`](super::generation) can borrow it for biome
 /// classification without duplicating the octave-blending logic.
 pub(crate) struct NoiseLayer {
-    perlin:    Perlin,
-    offset_x:  f64,
-    offset_y:  f64,
+    perlin: Perlin,
+    offset_x: f64,
+    offset_y: f64,
     base_freq: f64,
 }
 
 impl NoiseLayer {
     pub(crate) fn new(seed: u32, base_freq: f64, rng: &mut StdRng) -> Self {
         Self {
-            perlin:   Perlin::new(seed),
+            perlin: Perlin::new(seed),
             offset_x: (rng.random::<u32>() % 10_000) as f64,
             offset_y: (rng.random::<u32>() % 10_000) as f64,
             base_freq,
@@ -60,18 +60,18 @@ impl NoiseLayer {
     ///
     /// Returns a value in approximately `[-1, 1]`.
     pub(crate) fn sample(&self, x: usize, y: usize) -> f64 {
-        let mut value   = 0.0f64;
-        let mut amp     = 1.0f64;
+        let mut value = 0.0f64;
+        let mut amp = 1.0f64;
         let mut amp_sum = 0.0f64;
-        let mut freq    = self.base_freq;
+        let mut freq = self.base_freq;
 
         for _ in 0..LAYER_OCTAVES {
             let nx = (x as f64 + self.offset_x) * freq;
             let ny = (y as f64 + self.offset_y) * freq;
-            value   += self.perlin.get([nx, ny]) * amp;
+            value += self.perlin.get([nx, ny]) * amp;
             amp_sum += amp;
-            amp     *= LAYER_PERSISTENCE;
-            freq    *= LAYER_LACUNARITY;
+            amp *= LAYER_PERSISTENCE;
+            freq *= LAYER_LACUNARITY;
         }
 
         value / amp_sum

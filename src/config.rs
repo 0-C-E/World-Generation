@@ -16,14 +16,12 @@ use std::env;
 #[derive(Debug, Clone)]
 pub struct WorldConfig {
     // -- Map geometry -------------------------------------------------------
-
     /// Side length of the square world in tiles.
     pub map_size: u16,
     /// Side length of one chunk in tiles (chunks are always square).
     pub chunk_size: u16,
 
     // -- Noise / elevation --------------------------------------------------
-
     /// Perlin noise seed.
     pub seed: u32,
     /// Base frequency of the noise (higher = more detail per tile).
@@ -36,7 +34,6 @@ pub struct WorldConfig {
     pub lacunarity: f32,
 
     // -- Terrain classification ---------------------------------------------
-
     /// Elevation below this value is classified as water.
     pub water_threshold: f32,
     /// Maximum distance from the map center for the playable area.
@@ -47,7 +44,6 @@ pub struct WorldConfig {
     pub farland_margin: u16,
 
     // -- City placement -----------------------------------------------------
-
     /// Minimum tile spacing between two city slots.
     pub city_spacing: u8,
     /// Islands with fewer candidate city slots than this are excluded.
@@ -61,7 +57,6 @@ pub struct WorldConfig {
     pub min_water_neighbors: u8,
 
     // -- Village placement --------------------------------------------------
-
     /// Alpha coefficient in the village count formula:
     /// `villages = floor(alpha × (city_count − min_cities)^beta)`
     ///
@@ -133,7 +128,7 @@ impl WorldConfig {
             min_water_neighbors: env_u8("MIN_WATER_NEIGHBORS", 2),
             // Village defaults
             village_alpha: env_f64("VILLAGE_ALPHA", 1.2),
-            village_beta:  env_f64("VILLAGE_BETA",  0.60),
+            village_beta: env_f64("VILLAGE_BETA", 0.60),
             village_min_ocean_distance: env_u32("VILLAGE_MIN_OCEAN_DISTANCE", 12),
             village_spacing: env_u32("VILLAGE_SPACING", 30),
         }
