@@ -22,6 +22,7 @@
 
 use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rayon::prelude::*;
 
 use crate::biome::{gold::NoiseLayer, Biome};
 use crate::config::WorldConfig;
@@ -77,7 +78,7 @@ pub fn generate_biomes(
     let wt = config.water_threshold as f64;
     let mut biomes = vec![vec![0u8; size]; size];
 
-    for y in 0..size {
+    biomes.par_iter_mut().enumerate().for_each(|(y, row)| {
         for x in 0..size {
             let biome = match terrain[y][x] {
                 Terrain::Water => classify_water(elevation[y][x], wt, continentalness.sample(x, y)),
@@ -91,9 +92,9 @@ pub fn generate_biomes(
                 ),
                 Terrain::FarLand => Biome::FarLand,
             };
-            biomes[y][x] = biome.to_u8();
+            row[x] = biome.to_u8();
         }
-    }
+    });
 
     biomes
 }

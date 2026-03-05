@@ -35,6 +35,8 @@
 
 use std::collections::VecDeque;
 
+use rayon::prelude::*;
+
 // ---------------------------------------------------------------------------
 // Terrain enum
 // ---------------------------------------------------------------------------
@@ -103,13 +105,13 @@ pub fn classify_terrain(
     let mut terrain = vec![vec![Terrain::Land; map_size]; map_size];
     let center = map_size / 2;
 
-    for y in 0..map_size {
+    terrain.par_iter_mut().enumerate().for_each(|(y, row)| {
         for x in 0..map_size {
             let dx = (x as isize - center as isize) as f64;
             let dy = (y as isize - center as isize) as f64;
             let dist = (dx * dx + dy * dy).sqrt();
 
-            terrain[y][x] = if elevation[y][x] < water_threshold {
+            row[x] = if elevation[y][x] < water_threshold {
                 Terrain::Water
             } else if dist > farland_radius {
                 Terrain::FarLand
@@ -117,7 +119,7 @@ pub fn classify_terrain(
                 Terrain::Land
             };
         }
-    }
+    });
     terrain
 }
 
