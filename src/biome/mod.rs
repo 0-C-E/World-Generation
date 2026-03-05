@@ -35,16 +35,22 @@ use crate::terrain::Terrain;
 /// not a passive resource. See [`Biome::has_gold_veins`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ResourceModifiers {
-    pub wood:  i8,
+    pub wood: i8,
     pub stone: i8,
-    pub food:  i8,
+    pub food: i8,
     pub metal: i8,
     pub favor: i8,
 }
 
 impl ResourceModifiers {
     pub const fn new(wood: i8, stone: i8, food: i8, metal: i8, favor: i8) -> Self {
-        Self { wood, stone, food, metal, favor }
+        Self {
+            wood,
+            stone,
+            food,
+            metal,
+            favor,
+        }
     }
 }
 
@@ -60,11 +66,11 @@ impl ResourceModifiers {
 /// - `water_color`: receives `(raw_elevation, water_threshold)`.
 /// - `None` means the biome never appears in that terrain category.
 pub struct BiomeData {
-    pub name:          &'static str,
-    pub modifiers:     ResourceModifiers,
+    pub name: &'static str,
+    pub modifiers: ResourceModifiers,
     pub has_gold_veins: bool,
-    pub land_color:    Option<fn(f32) -> [u8; 3]>,
-    pub water_color:   Option<fn(f32, f32) -> [u8; 3]>,
+    pub land_color: Option<fn(f32) -> [u8; 3]>,
+    pub water_color: Option<fn(f32, f32) -> [u8; 3]>,
 }
 
 // ---------------------------------------------------------------------------
@@ -77,22 +83,22 @@ pub struct BiomeData {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Biome {
-    Ocean       = 0,
-    Coast       = 1,
-    Beach       = 2,
-    Plains      = 3,
-    Forest      = 4,
-    Swamp       = 5,
-    Hills       = 6,
-    Mountains   = 7,
-    SnowyPeaks  = 8,
-    Desert      = 9,
-    Tundra      = 10,
-    Valley      = 11,
-    Highlands   = 12,
+    Ocean = 0,
+    Coast = 1,
+    Beach = 2,
+    Plains = 3,
+    Forest = 4,
+    Swamp = 5,
+    Hills = 6,
+    Mountains = 7,
+    SnowyPeaks = 8,
+    Desert = 9,
+    Tundra = 10,
+    Valley = 11,
+    Highlands = 12,
     SacredGrove = 13,
-    DeepHarbor  = 14,
-    FarLand     = 15,
+    DeepHarbor = 14,
+    FarLand = 15,
 }
 
 impl Biome {
@@ -106,22 +112,22 @@ impl Biome {
     /// only requires adding one arm here (and one in `from_u8`).
     pub fn data(self) -> &'static BiomeData {
         match self {
-            Biome::Ocean       => &defs::ocean::DATA,
-            Biome::Coast       => &defs::coast::DATA,
-            Biome::Beach       => &defs::beach::DATA,
-            Biome::Plains      => &defs::plains::DATA,
-            Biome::Forest      => &defs::forest::DATA,
-            Biome::Swamp       => &defs::swamp::DATA,
-            Biome::Hills       => &defs::hills::DATA,
-            Biome::Mountains   => &defs::mountains::DATA,
-            Biome::SnowyPeaks  => &defs::snowy_peaks::DATA,
-            Biome::Desert      => &defs::desert::DATA,
-            Biome::Tundra      => &defs::tundra::DATA,
-            Biome::Valley      => &defs::valley::DATA,
-            Biome::Highlands   => &defs::highlands::DATA,
+            Biome::Ocean => &defs::ocean::DATA,
+            Biome::Coast => &defs::coast::DATA,
+            Biome::Beach => &defs::beach::DATA,
+            Biome::Plains => &defs::plains::DATA,
+            Biome::Forest => &defs::forest::DATA,
+            Biome::Swamp => &defs::swamp::DATA,
+            Biome::Hills => &defs::hills::DATA,
+            Biome::Mountains => &defs::mountains::DATA,
+            Biome::SnowyPeaks => &defs::snowy_peaks::DATA,
+            Biome::Desert => &defs::desert::DATA,
+            Biome::Tundra => &defs::tundra::DATA,
+            Biome::Valley => &defs::valley::DATA,
+            Biome::Highlands => &defs::highlands::DATA,
             Biome::SacredGrove => &defs::sacred_grove::DATA,
-            Biome::DeepHarbor  => &defs::deep_harbor::DATA,
-            Biome::FarLand     => &defs::far_land::DATA,
+            Biome::DeepHarbor => &defs::deep_harbor::DATA,
+            Biome::FarLand => &defs::far_land::DATA,
         }
     }
 
@@ -212,23 +218,23 @@ impl Biome {
     /// Unknown values fall back to [`Biome::Ocean`].
     pub fn from_u8(v: u8) -> Self {
         match v {
-            0  => Biome::Ocean,
-            1  => Biome::Coast,
-            2  => Biome::Beach,
-            3  => Biome::Plains,
-            4  => Biome::Forest,
-            5  => Biome::Swamp,
-            6  => Biome::Hills,
-            7  => Biome::Mountains,
-            8  => Biome::SnowyPeaks,
-            9  => Biome::Desert,
+            0 => Biome::Ocean,
+            1 => Biome::Coast,
+            2 => Biome::Beach,
+            3 => Biome::Plains,
+            4 => Biome::Forest,
+            5 => Biome::Swamp,
+            6 => Biome::Hills,
+            7 => Biome::Mountains,
+            8 => Biome::SnowyPeaks,
+            9 => Biome::Desert,
             10 => Biome::Tundra,
             11 => Biome::Valley,
             12 => Biome::Highlands,
             13 => Biome::SacredGrove,
             14 => Biome::DeepHarbor,
             15 => Biome::FarLand,
-            _  => Biome::Ocean,
+            _ => Biome::Ocean,
         }
     }
 }

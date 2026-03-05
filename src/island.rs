@@ -24,7 +24,12 @@ pub struct BoundingBox {
 impl BoundingBox {
     /// Creates a bounding box containing a single point.
     pub fn point(x: u32, y: u32) -> Self {
-        Self { min_x: x, min_y: y, max_x: x, max_y: y }
+        Self {
+            min_x: x,
+            min_y: y,
+            max_x: x,
+            max_y: y,
+        }
     }
 
     /// Expands the bounding box to include the point `(x, y)`.
@@ -119,10 +124,7 @@ pub fn discover_islands(
         .map(|(region_id, (sum_x, sum_y, count))| Island {
             id: region_id,
             city_count: count,
-            centroid: (
-                (sum_x / count as u64) as u32,
-                (sum_y / count as u64) as u32,
-            ),
+            centroid: ((sum_x / count as u64) as u32, (sum_y / count as u64) as u32),
             bounds: bounding_boxes.get(&region_id).copied().unwrap_or_default(),
             is_world_spawn: false,
             spawn_order: 0,
@@ -132,7 +134,10 @@ pub fn discover_islands(
     // Step 4: Tag the largest island as world spawn.
     let spawn_centroid = if let Some(spawn) = islands.iter_mut().max_by_key(|i| i.city_count) {
         spawn.is_world_spawn = true;
-        eprintln!("Tagged island {} as world spawn ({} cities)", spawn.id, spawn.city_count);
+        eprintln!(
+            "Tagged island {} as world spawn ({} cities)",
+            spawn.id, spawn.city_count
+        );
         spawn.centroid
     } else {
         // No islands at all -- nothing more to do.
@@ -142,10 +147,8 @@ pub fn discover_islands(
     // Step 5: Rank remaining islands by distance from the spawn centroid.
     // Use squared distance to avoid sqrt; relative order is identical.
     let (sx, sy) = (spawn_centroid.0 as i64, spawn_centroid.1 as i64);
-    let mut non_spawn: Vec<&mut Island> = islands
-        .iter_mut()
-        .filter(|i| !i.is_world_spawn)
-        .collect();
+    let mut non_spawn: Vec<&mut Island> =
+        islands.iter_mut().filter(|i| !i.is_world_spawn).collect();
 
     non_spawn.sort_by_key(|island| {
         let dx = island.centroid.0 as i64 - sx;
@@ -173,9 +176,10 @@ pub(crate) fn ensure_chunk(
     cx: u32,
     cy: u32,
 ) {
-    if !cache.contains_key(&(cx, cy)) {
+    use std::collections::hash_map::Entry;
+    if let Entry::Vacant(e) = cache.entry((cx, cy)) {
         if let Ok(chunk) = reader.load_chunk(cx, cy) {
-            cache.insert((cx, cy), chunk);
+            e.insert(chunk);
         }
     }
 }
