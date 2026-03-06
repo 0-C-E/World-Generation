@@ -7,8 +7,9 @@
 //!   · chunks_x(2) · chunks_y(2) · num_cities(4) · city_slots · city_resources
 //!   · num_villages(4) · villages · chunk_index · chunk_data
 //!
-//! Villages were added to version 1 before any production worlds were generated,
-//! so there is no legacy v1 format without villages.
+//! Each chunk stores 8 bytes per tile (terrain, elevation, region label,
+//! biome). Per-city [`CityResources`](crate::biome::CityResources) are
+//! stored in the header.
 
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write};
@@ -215,7 +216,7 @@ pub fn save_world_chunked(path: &str, data: &WorldData) -> io::Result<()> {
                     raw.push(data.terrain[idx]);
                     let elev_u16 = (data.elevation[idx].clamp(0.0, 1.0) * 65535.0) as u16;
                     raw.extend_from_slice(&elev_u16.to_le_bytes());
-                    raw.extend_from_slice(&(data.region_labels[idx] as u16).to_le_bytes());
+                    raw.extend_from_slice(&(data.region_labels[idx] as u32).to_le_bytes());
                     raw.push(data.biomes[idx]);
                 }
             }
@@ -415,9 +416,9 @@ impl ChunkedWorldReader {
             cursor.read_exact(&mut e)?;
             elevation.push(u16::from_le_bytes(e) as f32 / 65535.0);
 
-            let mut r = [0u8; 2];
+            let mut r = [0u8; 4];
             cursor.read_exact(&mut r)?;
-            region_labels.push(u16::from_le_bytes(r) as u32);
+            region_labels.push(u32::from_le_bytes(r));
 
             let mut b = [0u8; 1];
             cursor.read_exact(&mut b)?;
