@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use rayon::prelude::*;
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::biome::{gold::GoldVeinSampler, Biome};
 
