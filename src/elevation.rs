@@ -35,7 +35,7 @@
 use noise::{NoiseFn, Perlin};
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
-use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefMutIterator, IndexedParallelIterator, ParallelIterator};
 
 use crate::config::WorldConfig;
 

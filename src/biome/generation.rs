@@ -22,8 +22,7 @@
 
 use rand::rngs::StdRng;
 use rand::SeedableRng;
-use rayon::iter::ParallelIterator;
-use rayon::slice::ParallelSliceMut;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::biome::{gold::NoiseLayer, Biome};
 use crate::config::WorldConfig;
