@@ -7,6 +7,8 @@
 
 use std::collections::HashMap;
 
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
+
 use crate::biome::{gold::GoldVeinSampler, Biome};
 
 // ---------------------------------------------------------------------------
@@ -82,7 +84,7 @@ pub fn compute_city_resources(
     let gold_sampler = GoldVeinSampler::new(seed);
 
     city_slots
-        .iter()
+        .par_iter()
         .map(|&(cx, cy)| {
             let mut wood_sum: i32 = 0;
             let mut stone_sum: i32 = 0;
