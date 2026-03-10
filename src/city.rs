@@ -1,8 +1,33 @@
-//! City placement.
+//! City slot placement and filtering.
 //!
-//! Cities are placed on coastal land tiles -- tiles that border both land and
-//! ocean. A minimum-spacing grid prevents clustering, and islands with too
-//! few candidates are discarded.
+//! # Overview
+//!
+//! Cities must be placed on coastal Land tiles that meet strict criteria.
+//! This module handles both discovery and validation.
+//!
+//! # Placement rules
+//!
+//! A tile qualifies as a city slot when:
+//! 1. It is classified as [`Land`](crate::terrain::Terrain::Land)
+//! 2. It lies within the playable radius
+//! 3. It has sufficient land neighbors (default: 2)
+//! 4. It has sufficient water neighbors (default: 2)
+//! 5. At least one water neighbor belongs to a "large" water body (ocean, not puddle)
+//! 6. It is far enough from all previously placed slots (minimum spacing grid)
+//!
+//! # Island filtering
+//!
+//! After placement, islands with too few city slots are discarded entirely.
+//! This ensures every playable island has a minimum strategic value.
+//! Cities on small islands are removed along with their island.
+//!
+//! # Example
+//!
+//! ```ignore
+//! let slots = find_city_slots(&terrain, &water_bodies, &config);
+//! let filtered = filter_city_slots_by_region(&slots, &region_labels, 6);
+//! // `filtered` contains only cities on islands with ≥ 6 slots
+//! ```
 
 use std::collections::HashMap;
 
@@ -13,12 +38,30 @@ use crate::terrain::{Terrain, WaterBodies};
 // Public API
 // ---------------------------------------------------------------------------
 
-/// Scan the terrain grid for valid coastal city positions.
+/// Discover all valid coastal city positions on the map.
 ///
-/// A tile qualifies when it is [`Land`](Terrain::Land), lies within the
-/// playable radius, has enough land and water neighbours (at least one
-/// touching a large water body), and is far enough from every already-accepted
-/// slot.
+/// # Algorithm
+///
+/// For each Land tile within the playable radius:
+/// 1. Count land and water neighbors (4-connected adjacency)
+/// 2. Collect water neighbor positions
+/// 3. Check if minimum land/water neighbor counts are met
+/// 4. Check if any water neighbor belongs to a "large" water body
+/// 5. Check if the tile is far enough from all already-placed slots
+///
+/// If all checks pass, add the tile to the result and mark a spacing
+/// radius around it as "taken" (no more cities within spacing distance).
+///
+/// # Parameters
+///
+/// - `spacing`: Minimum tile distance between cities (default: 5)
+/// - `playable_radius`: Maximum distance from map center
+/// - `min_land`, `min_water`: Neighbor count thresholds
+/// - `min_body`: Minimum size for a water body to count as "large"
+///
+/// # Returns
+///
+/// Vector of `(x, y)` coordinates for valid city slots, unsorted.
 pub fn find_city_slots(
     terrain: &[Vec<Terrain>],
     water: &WaterBodies,
@@ -46,8 +89,7 @@ pub fn find_city_slots(
                 continue;
             }
 
-            let (land, water_count, water_positions) =
-                count_neighbors(terrain, x, y, map_size);
+            let (land, water_count, water_positions) = count_neighbors(terrain, x, y, map_size);
 
             if land >= min_land
                 && water_count >= min_water
@@ -64,7 +106,23 @@ pub fn find_city_slots(
     slots
 }
 
-/// Keep only city slots on islands that have at least `min_slots` candidates.
+/// Filter city slots by region, keeping only those on "large enough" islands.
+///
+/// # Algorithm
+///
+/// 1. Group city slots by their region ID (island)
+/// 2. Filter groups to keep only those with ≥ `min_slots` slots
+/// 3. Return all slots from surviving groups
+///
+/// # Purpose
+///
+/// Prevents tiny islands (with only 1–2 cities) from appearing in the game world.
+/// These small islands either become unclaimed, or if claimed, remain strategically
+/// weak with minimal resources. Filtering them simplifies the game.
+///
+/// # Parameters
+///
+/// - `min_slots`: Minimum cities required to keep an island (default: 6)
 pub fn filter_city_slots_by_region(
     city_slots: &[(usize, usize)],
     region_map: &[Vec<usize>],

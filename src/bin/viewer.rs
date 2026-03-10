@@ -1,14 +1,11 @@
 //! Interactive map viewer - serves tiles and overlays over HTTP.
-//!
-//! Start with `cargo run --bin viewer [path]` and open `http://localhost:8080`.
-//! Configuration is read from environment variables (and `.env` in dev).
 
 use std::collections::HashMap;
 
 use tiny_http::{Header, Request, Response, Server};
 
 use world_generator::island::Island;
-use world_generator::tile::{render_tile, render_debug_tile, TILE_SIZE};
+use world_generator::tile::{render_debug_tile, render_tile, TILE_SIZE};
 use world_generator::World;
 
 // ---------------------------------------------------------------------------
@@ -20,6 +17,7 @@ const CSS: &str = include_str!("../../static/style.css");
 const VIEWER_JS: &str = include_str!("../../static/viewer.js");
 const NIGHT_MODE_JS: &str = include_str!("../../static/night-mode.js");
 const CITY_ICON_SVG: &str = include_str!("../../static/city-icon.svg");
+const VILLAGE_ICON_SVG: &str = include_str!("../../static/village-icon.svg");
 const DEBUG_HTML: &str = include_str!("../../static/debug.html");
 const DEBUG_CSS: &str = include_str!("../../static/debug.css");
 const DEBUG_JS: &str = include_str!("../../static/debug.js");
@@ -56,7 +54,6 @@ impl ServerState {
 // ---------------------------------------------------------------------------
 
 fn main() {
-    // Load .env file if present (silently ignored if missing).
     let _ = dotenvy::dotenv();
 
     let path = std::env::args()
@@ -68,7 +65,6 @@ fn main() {
         std::process::exit(1);
     }
 
-    // Fingerprint based on the world seed - changes when the world is regenerated.
     let world = World::open(&path).unwrap_or_else(|e| {
         eprintln!("Failed to open world: {e}");
         std::process::exit(1);
@@ -77,10 +73,11 @@ fn main() {
     let fingerprint = format!("{:x}", world.config().seed);
 
     eprintln!(
-        "Loaded {path}: {}x{} world, {} cities, seed {}",
+        "Loaded {path}: {}x{} world, {} cities, {} villages, seed {}",
         world.width(),
         world.height(),
         world.city_slots().len(),
+        world.villages().len(),
         world.config().seed,
     );
 
@@ -92,7 +89,6 @@ fn main() {
         world_fingerprint: fingerprint,
     };
 
-    // Only pre-compute islands -- cities are served on demand per viewport.
     eprintln!("Pre-computing islands...");
     state.ensure_islands_json();
     eprintln!("Ready.");
@@ -103,7 +99,6 @@ fn main() {
 
     for request in server.incoming_requests() {
         let full_url = request.url().to_owned();
-        // Strip query string for routing, but keep full_url for param parsing.
         let url = full_url.split('?').next().unwrap_or(&full_url).to_owned();
         handle_request(request, &url, &full_url, &mut state);
     }
@@ -121,11 +116,11 @@ fn handle_request(request: Request, url: &str, full_url: &str, state: &mut Serve
         }
         "/style.css" => respond(request, "text/css", CSS),
         "/viewer.js" => {
-            let js = inject_config(VIEWER_JS, &state);
+            let js = inject_config(VIEWER_JS, state);
             respond(request, "application/javascript", js);
         }
         "/night-mode.js" => {
-            let js = inject_config(NIGHT_MODE_JS, &state);
+            let js = inject_config(NIGHT_MODE_JS, state);
             respond(request, "application/javascript", js);
         }
         "/debug" => {
@@ -134,14 +129,15 @@ fn handle_request(request: Request, url: &str, full_url: &str, state: &mut Serve
         }
         "/debug.css" => respond(request, "text/css", DEBUG_CSS),
         "/debug.js" => {
-            let js = inject_config(DEBUG_JS, &state);
+            let js = inject_config(DEBUG_JS, state);
             respond(request, "application/javascript", js);
         }
         "/status" => respond(request, "application/json", r#"{"ready":true}"#),
         "/city-icon.svg" => respond(request, "image/svg+xml", CITY_ICON_SVG),
+        "/village-icon.svg" => respond(request, "image/svg+xml", VILLAGE_ICON_SVG),
 
-        // Viewport-scoped city query: /cities?x0=&y0=&x1=&y1=
         "/cities" => handle_cities_viewport(request, full_url, state),
+        "/villages" => handle_villages_viewport(request, full_url, state),
         "/islands.json" => {
             state.ensure_islands_json();
             respond(
@@ -154,19 +150,10 @@ fn handle_request(request: Request, url: &str, full_url: &str, state: &mut Serve
         _ if url.starts_with("/outline/") && url.ends_with(".json") => {
             handle_outline(request, url, state);
         }
-
-        _ if url.starts_with("/dtile/") => {
-            handle_debug_tile(request, url, state);
-        }
-
-        _ if url.starts_with("/tile/") => {
-            handle_tile(request, url, state);
-        }
-
+        _ if url.starts_with("/dtile/") => handle_debug_tile(request, url, state),
+        _ if url.starts_with("/tile/") => handle_tile(request, url, state),
         _ => {
-            let _ = request.respond(
-                Response::from_string("Not Found").with_status_code(404),
-            );
+            let _ = request.respond(Response::from_string("Not Found").with_status_code(404));
         }
     }
 }
@@ -175,7 +162,6 @@ fn handle_request(request: Request, url: &str, full_url: &str, state: &mut Serve
 // Tile handlers
 // ---------------------------------------------------------------------------
 
-/// Parse `z/x/y.png` coordinates from a tile URL with the given prefix.
 fn parse_tile_coords(url: &str, prefix: &str) -> Option<(u32, u32, u32)> {
     let parts: Vec<&str> = url.trim_start_matches(prefix).split('/').collect();
     if parts.len() != 3 {
@@ -192,22 +178,26 @@ fn handle_tile(request: Request, url: &str, state: &mut ServerState) {
         let _ = request.respond(Response::from_string("Bad Request").with_status_code(400));
         return;
     };
-
     if !state.tile_cache.contains_key(&(z, x, y)) {
         match render_tile(&mut state.world, z, x, y) {
-            Some(png) => { state.tile_cache.insert((z, x, y), png); }
+            Some(png) => {
+                state.tile_cache.insert((z, x, y), png);
+            }
             None => {
                 let _ = request.respond(Response::from_string("Not Found").with_status_code(404));
                 return;
             }
         }
     }
-
     let png = state.tile_cache.get(&(z, x, y)).unwrap();
     let header = Header::from_bytes("Content-Type", "image/png").unwrap();
-    let cache = Header::from_bytes("Cache-Control", format!("public, max-age={}", 60 * 15)).unwrap();
-    let response = Response::from_data(png.clone()).with_header(header).with_header(cache);
-    let _ = request.respond(response);
+    let cache =
+        Header::from_bytes("Cache-Control", format!("public, max-age={}", 60 * 15)).unwrap();
+    let _ = request.respond(
+        Response::from_data(png.clone())
+            .with_header(header)
+            .with_header(cache),
+    );
 }
 
 fn handle_debug_tile(request: Request, url: &str, state: &mut ServerState) {
@@ -215,15 +205,15 @@ fn handle_debug_tile(request: Request, url: &str, state: &mut ServerState) {
         let _ = request.respond(Response::from_string("Bad Request").with_status_code(400));
         return;
     };
-
     match render_debug_tile(&mut state.world, z, x, y) {
         Some(png) => {
             let header = Header::from_bytes("Content-Type", "image/png").unwrap();
             let no_cache = Header::from_bytes("Cache-Control", "no-store").unwrap();
-            let response = Response::from_data(png)
-                .with_header(header)
-                .with_header(no_cache);
-            let _ = request.respond(response);
+            let _ = request.respond(
+                Response::from_data(png)
+                    .with_header(header)
+                    .with_header(no_cache),
+            );
         }
         None => {
             let _ = request.respond(Response::from_string("Not Found").with_status_code(404));
@@ -235,36 +225,8 @@ fn handle_debug_tile(request: Request, url: &str, state: &mut ServerState) {
 // Viewport city handler
 // ---------------------------------------------------------------------------
 
-/// Serve only the cities that fall within the requested world-coordinate bbox.
-///
-/// Query params: `x0`, `y0` (top-left), `x1`, `y1` (bottom-right), all in
-/// world tile coordinates. Defaults to the full map if params are absent.
-///
-/// Returns the same JSON shape as the old `/cities.json`:
-/// `[x, y, region_label, {wood, stone, food, metal, favor, gold_nodes, biome}]`
 fn handle_cities_viewport(request: Request, full_url: &str, state: &mut ServerState) {
-    let query = full_url.splitn(2, '?').nth(1).unwrap_or("");
-    let world_w = state.world.width();
-    let world_h = state.world.height();
-
-    let mut x0 = 0u32;
-    let mut y0 = 0u32;
-    let mut x1 = world_w.saturating_sub(1);
-    let mut y1 = world_h.saturating_sub(1);
-
-    for pair in query.split('&') {
-        let mut it = pair.splitn(2, '=');
-        let key = it.next().unwrap_or("");
-        let val: u32 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0);
-        match key {
-            "x0" => x0 = val.min(world_w),
-            "y0" => y0 = val.min(world_h),
-            "x1" => x1 = val.min(world_w.saturating_sub(1)),
-            "y1" => y1 = val.min(world_h.saturating_sub(1)),
-            _ => {}
-        }
-    }
-
+    let (x0, y0, x1, y1) = parse_bbox(full_url, state.world.width(), state.world.height());
     let json = build_cities_viewport_json(&mut state.world, x0, y0, x1, y1);
     let no_cache = Header::from_bytes("Cache-Control", "no-store").unwrap();
     let header = Header::from_bytes("Content-Type", "application/json").unwrap();
@@ -275,13 +237,11 @@ fn handle_cities_viewport(request: Request, full_url: &str, state: &mut ServerSt
     );
 }
 
-/// Build a JSON array of cities within the given world-coordinate bounding box.
 fn build_cities_viewport_json(world: &mut World, x0: u32, y0: u32, x1: u32, y1: u32) -> String {
     let city_slots = world.city_slots().to_vec();
     let city_resources = world.city_resources().to_vec();
     let cs = world.config().chunk_size as u32;
 
-    // Filter to only cities within the requested bbox.
     let in_bbox: Vec<(usize, u32, u32)> = city_slots
         .iter()
         .enumerate()
@@ -289,10 +249,13 @@ fn build_cities_viewport_json(world: &mut World, x0: u32, y0: u32, x1: u32, y1: 
         .map(|(i, &(x, y))| (i, x, y))
         .collect();
 
-    // Group by chunk to batch I/O.
-    let mut by_chunk: HashMap<(u32, u32), Vec<(usize, u32, u32)>> = HashMap::new();
+    type ChunkEntry = Vec<(usize, u32, u32)>;
+    let mut by_chunk: HashMap<(u32, u32), ChunkEntry> = HashMap::new();
     for &(i, x, y) in &in_bbox {
-        by_chunk.entry((x / cs, y / cs)).or_default().push((i, x, y));
+        by_chunk
+            .entry((x / cs, y / cs))
+            .or_default()
+            .push((i, x, y));
     }
 
     let mut entries: Vec<(usize, String)> = Vec::with_capacity(in_bbox.len());
@@ -323,6 +286,54 @@ fn build_cities_viewport_json(world: &mut World, x0: u32, y0: u32, x1: u32, y1: 
 }
 
 // ---------------------------------------------------------------------------
+// Viewport village handler
+// ---------------------------------------------------------------------------
+
+/// Serve villages within the requested world-coordinate bbox.
+///
+/// Query params: `x0`, `y0`, `x1`, `y1` (world tile coordinates).
+///
+/// Returns a JSON array:
+/// `[[x, y, region_id, offers_name, demands_name, biome_name], ...]`
+fn handle_villages_viewport(request: Request, full_url: &str, state: &mut ServerState) {
+    let (x0, y0, x1, y1) = parse_bbox(full_url, state.world.width(), state.world.height());
+    let json = build_villages_viewport_json(&state.world, x0, y0, x1, y1);
+    let no_cache = Header::from_bytes("Cache-Control", "no-store").unwrap();
+    let header = Header::from_bytes("Content-Type", "application/json").unwrap();
+    let _ = request.respond(
+        Response::from_string(json)
+            .with_header(header)
+            .with_header(no_cache),
+    );
+}
+
+fn build_villages_viewport_json(world: &World, x0: u32, y0: u32, x1: u32, y1: u32) -> String {
+    let entries: Vec<String> = world
+        .villages()
+        .iter()
+        .filter(|v| {
+            let vx = v.x as u32;
+            let vy = v.y as u32;
+            vx >= x0 && vx <= x1 && vy >= y0 && vy <= y1
+        })
+        .map(|v| {
+            let biome_name = world_generator::biome::Biome::from_u8(v.biome).name();
+            format!(
+                "[{},{},{},\"{}\",\"{}\",\"{}\"]",
+                v.x,
+                v.y,
+                v.region_id,
+                v.trade.offers.name(),
+                v.trade.demands.name(),
+                biome_name,
+            )
+        })
+        .collect();
+
+    format!("[{}]", entries.join(","))
+}
+
+// ---------------------------------------------------------------------------
 // Outline handler
 // ---------------------------------------------------------------------------
 
@@ -330,17 +341,13 @@ fn handle_outline(request: Request, url: &str, state: &mut ServerState) {
     let id_str = url
         .trim_start_matches("/outline/")
         .trim_end_matches(".json");
-
     let rid: u32 = match id_str.parse() {
         Ok(v) => v,
         Err(_) => {
-            let _ = request.respond(
-                Response::from_string("Bad Request").with_status_code(400),
-            );
+            let _ = request.respond(Response::from_string("Bad Request").with_status_code(400));
             return;
         }
     };
-
     state.ensure_island_outlines();
     let json = state
         .island_outlines
@@ -349,7 +356,6 @@ fn handle_outline(request: Request, url: &str, state: &mut ServerState) {
         .get(&rid)
         .map(String::as_str)
         .unwrap_or("[]");
-
     respond(request, "application/json", json);
 }
 
@@ -357,14 +363,6 @@ fn handle_outline(request: Request, url: &str, state: &mut ServerState) {
 // JSON builders
 // ---------------------------------------------------------------------------
 
-/// Serialize a list of islands to a JSON array.
-///
-/// Each entry is:
-/// `[id, cx, cy, city_count, min_x, min_y, max_x, max_y, is_world_spawn, spawn_order]`
-///
-/// `is_world_spawn` is `1` for the designated spawn island, `0` otherwise.
-/// `spawn_order` is `0` for the spawn island, then `1, 2, 3, …` in order of
-/// centroid distance from the spawn.
 fn islands_to_json(islands: &[Island]) -> String {
     let entries: Vec<String> = islands
         .iter()
@@ -391,18 +389,12 @@ fn islands_to_json(islands: &[Island]) -> String {
 // Island outline tracing
 // ---------------------------------------------------------------------------
 
-/// Build outline polylines for every island.
-///
-/// Requires all chunks to be loaded (triggered by `ensure_islands_computed`).
 fn build_island_outlines(world: &mut World) -> HashMap<u32, String> {
-    // Ensure all chunks and islands are loaded.
     world.ensure_islands_computed();
-
     let islands = world.islands().to_vec();
     let map_w = world.width();
     let map_h = world.height();
-
-    let step = 4u32; // outline grid resolution (1 cell = `step` tiles)
+    let step = 4u32;
     let mut outlines = HashMap::new();
 
     for island in &islands {
@@ -412,7 +404,6 @@ fn build_island_outlines(world: &mut World) -> HashMap<u32, String> {
         let y0 = bb.min_y.saturating_sub(pad);
         let x1 = (bb.max_x + pad).min(map_w - 1);
         let y1 = (bb.max_y + pad).min(map_h - 1);
-
         let gw = ((x1 - x0) / step + 1) as usize;
         let gh = ((y1 - y0) / step + 1) as usize;
 
@@ -421,20 +412,17 @@ fn build_island_outlines(world: &mut World) -> HashMap<u32, String> {
             continue;
         }
 
-        // Build a boolean grid: true = this island, false = not.
         let mut grid = vec![false; gw * gh];
         for gy in 0..gh {
             for gx in 0..gw {
                 let wx = x0 + gx as u32 * step;
                 let wy = y0 + gy as u32 * step;
                 if wx < map_w && wy < map_h {
-                    grid[gy * gw + gx] =
-                        world.region_label_at_cached(wx, wy) == island.id;
+                    grid[gy * gw + gx] = world.region_label_at_cached(wx, wy) == island.id;
                 }
             }
         }
 
-        // Find boundary cells (island cells adjacent to non-island cells).
         let mut points = Vec::new();
         for gy in 0..gh {
             for gx in 0..gw {
@@ -449,7 +437,6 @@ fn build_island_outlines(world: &mut World) -> HashMap<u32, String> {
                     || !grid[gy * gw + (gx + 1)]
                     || !grid[(gy - 1) * gw + gx]
                     || !grid[(gy + 1) * gw + gx];
-
                 if is_edge {
                     let wx = x0 + gx as u32 * step;
                     let wy = y0 + gy as u32 * step;
@@ -457,7 +444,6 @@ fn build_island_outlines(world: &mut World) -> HashMap<u32, String> {
                 }
             }
         }
-
         outlines.insert(island.id, format!("[{}]", points.join(",")));
     }
 
@@ -466,11 +452,31 @@ fn build_island_outlines(world: &mut World) -> HashMap<u32, String> {
 }
 
 // ---------------------------------------------------------------------------
-// Config injection into JS templates
+// Shared helpers
 // ---------------------------------------------------------------------------
 
-/// Replace `{{ MAP_SIZE }}`, `{{ TILE_SIZE }}`, and `{{ MAX_ZOOM }}` placeholders
-/// in a JS template string with the actual world values.
+/// Parse `x0`, `y0`, `x1`, `y1` query params, clamped to world bounds.
+fn parse_bbox(full_url: &str, world_w: u32, world_h: u32) -> (u32, u32, u32, u32) {
+    let query = full_url.split_once('?').map(|(_, q)| q).unwrap_or("");
+    let mut x0 = 0u32;
+    let mut y0 = 0u32;
+    let mut x1 = world_w.saturating_sub(1);
+    let mut y1 = world_h.saturating_sub(1);
+    for pair in query.split('&') {
+        let mut it = pair.splitn(2, '=');
+        let key = it.next().unwrap_or("");
+        let val: u32 = it.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+        match key {
+            "x0" => x0 = val.min(world_w),
+            "y0" => y0 = val.min(world_h),
+            "x1" => x1 = val.min(world_w.saturating_sub(1)),
+            "y1" => y1 = val.min(world_h.saturating_sub(1)),
+            _ => {}
+        }
+    }
+    (x0, y0, x1, y1)
+}
+
 fn inject_config(template: &str, state: &ServerState) -> String {
     let cfg = state.world.config();
     template
@@ -478,10 +484,6 @@ fn inject_config(template: &str, state: &ServerState) -> String {
         .replace("{{ TILE_SIZE }}", &TILE_SIZE.to_string())
         .replace("{{ MAX_ZOOM }}", &cfg.max_zoom().to_string())
 }
-
-// ---------------------------------------------------------------------------
-// Response helper
-// ---------------------------------------------------------------------------
 
 fn respond(request: Request, content_type: &str, body: impl Into<String>) {
     let header = Header::from_bytes("Content-Type", content_type).unwrap();
