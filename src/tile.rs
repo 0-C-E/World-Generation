@@ -283,7 +283,10 @@ fn set_pixel(pixels: &mut [u8], x: u32, y: u32, color: [u8; 3]) {
 /// Returns the PNG byte buffer on success, or an empty buffer on encoding errors.
 /// This graceful degradation ensures failed tiles don't crash the server.
 fn encode_png(pixels: &[u8], width: u32, height: u32) -> Vec<u8> {
-    let mut buffer = Vec::new();
+    // PNG has fixed framing bytes (signature + IHDR/IEND + chunk framing),
+    // so preallocate a tiny lower bound to avoid the first growth.
+    const PNG_MIN_BYTES: usize = 67;
+    let mut buffer = Vec::with_capacity(PNG_MIN_BYTES);
 
     // Create and configure PNG encoder
     {

@@ -1,6 +1,8 @@
 //! Interactive map viewer - serves tiles and overlays over HTTP.
 
 use std::collections::HashMap;
+use std::fmt::Write;
+use std::time::Instant;
 
 use tiny_http::{Header, Request, Response, Server};
 
@@ -65,15 +67,17 @@ fn main() {
         std::process::exit(1);
     }
 
+    let load_start = Instant::now();
     let world = World::open(&path).unwrap_or_else(|e| {
         eprintln!("Failed to open world: {e}");
         std::process::exit(1);
     });
+    let load_elapsed = load_start.elapsed();
 
     let fingerprint = format!("{:x}", world.config().seed);
 
     eprintln!(
-        "Loaded {path}: {}x{} world, {} cities, {} villages, seed {}",
+        "Loaded {path} in {load_elapsed:.2?}: {}x{} world, {} cities, {} villages, seed {}",
         world.width(),
         world.height(),
         world.city_slots().len(),
@@ -90,8 +94,9 @@ fn main() {
     };
 
     eprintln!("Pre-computing islands...");
+    let islands_start = Instant::now();
     state.ensure_islands_json();
-    eprintln!("Ready.");
+    eprintln!("Islands ready in {:.2?}.", islands_start.elapsed());
 
     let addr = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0:8080".into());
     let server = Server::http(&addr).expect("Failed to bind");
@@ -163,13 +168,13 @@ fn handle_request(request: Request, url: &str, full_url: &str, state: &mut Serve
 // ---------------------------------------------------------------------------
 
 fn parse_tile_coords(url: &str, prefix: &str) -> Option<(u32, u32, u32)> {
-    let parts: Vec<&str> = url.trim_start_matches(prefix).split('/').collect();
-    if parts.len() != 3 {
+    let mut parts = url.trim_start_matches(prefix).splitn(4, '/');
+    let z: u32 = parts.next()?.parse().ok()?;
+    let x: u32 = parts.next()?.parse().ok()?;
+    let y: u32 = parts.next()?.trim_end_matches(".png").parse().ok()?;
+    if parts.next().is_some() {
         return None;
     }
-    let z: u32 = parts[0].parse().ok()?;
-    let x: u32 = parts[1].parse().ok()?;
-    let y: u32 = parts[2].trim_end_matches(".png").parse().ok()?;
     Some((z, x, y))
 }
 
@@ -308,7 +313,7 @@ fn handle_villages_viewport(request: Request, full_url: &str, state: &mut Server
 }
 
 fn build_villages_viewport_json(world: &World, x0: u32, y0: u32, x1: u32, y1: u32) -> String {
-    let entries: Vec<String> = world
+    let villages: Vec<_> = world
         .villages()
         .iter()
         .filter(|v| {
@@ -316,21 +321,33 @@ fn build_villages_viewport_json(world: &World, x0: u32, y0: u32, x1: u32, y1: u3
             let vy = v.y as u32;
             vx >= x0 && vx <= x1 && vy >= y0 && vy <= y1
         })
-        .map(|v| {
-            let biome_name = world_generator::biome::Biome::from_u8(v.biome).name();
-            format!(
-                "[{},{},{},\"{}\",\"{}\",\"{}\"]",
-                v.x,
-                v.y,
-                v.region_id,
-                v.trade.offers.name(),
-                v.trade.demands.name(),
-                biome_name,
-            )
-        })
         .collect();
 
-    format!("[{}]", entries.join(","))
+    let mut out = String::with_capacity(villages.len() * 48);
+    out.push('[');
+    let mut first = true;
+
+    for v in villages {
+        let biome_name = world_generator::biome::Biome::from_u8(v.biome).name();
+        if !first {
+            out.push(',');
+        }
+        first = false;
+        use std::fmt::Write;
+        let _ = write!(
+            out,
+            "[{},{},{},\"{}\",\"{}\",\"{}\"]",
+            v.x,
+            v.y,
+            v.region_id,
+            v.trade.offers.name(),
+            v.trade.demands.name(),
+            biome_name,
+        );
+    }
+
+    out.push(']');
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -364,25 +381,30 @@ fn handle_outline(request: Request, url: &str, state: &mut ServerState) {
 // ---------------------------------------------------------------------------
 
 fn islands_to_json(islands: &[Island]) -> String {
-    let entries: Vec<String> = islands
-        .iter()
-        .map(|i| {
-            format!(
-                "[{},{},{},{},{},{},{},{},{},{}]",
-                i.id,
-                i.centroid.0,
-                i.centroid.1,
-                i.city_count,
-                i.bounds.min_x,
-                i.bounds.min_y,
-                i.bounds.max_x,
-                i.bounds.max_y,
-                i.is_world_spawn as u8,
-                i.spawn_order,
-            )
-        })
-        .collect();
-    format!("[{}]", entries.join(","))
+    let mut out = String::with_capacity(islands.len() * 64);
+    out.push('[');
+    use std::fmt::Write;
+    for (i, island) in islands.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        let _ = write!(
+            out,
+            "[{},{},{},{},{},{},{},{},{},{}]",
+            island.id,
+            island.centroid.0,
+            island.centroid.1,
+            island.city_count,
+            island.bounds.min_x,
+            island.bounds.min_y,
+            island.bounds.max_x,
+            island.bounds.max_y,
+            island.is_world_spawn as u8,
+            island.spawn_order,
+        );
+    }
+    out.push(']');
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -395,7 +417,7 @@ fn build_island_outlines(world: &mut World) -> HashMap<u32, String> {
     let map_w = world.width();
     let map_h = world.height();
     let step = 4u32;
-    let mut outlines = HashMap::new();
+    let mut outlines = HashMap::with_capacity(islands.len());
 
     for island in &islands {
         let bb = &island.bounds;
@@ -423,7 +445,9 @@ fn build_island_outlines(world: &mut World) -> HashMap<u32, String> {
             }
         }
 
-        let mut points = Vec::new();
+        let mut out = String::with_capacity((gw + gh) * 2 * 16);
+        out.push('[');
+        let mut first = true;
         for gy in 0..gh {
             for gx in 0..gw {
                 if !grid[gy * gw + gx] {
@@ -440,11 +464,16 @@ fn build_island_outlines(world: &mut World) -> HashMap<u32, String> {
                 if is_edge {
                     let wx = x0 + gx as u32 * step;
                     let wy = y0 + gy as u32 * step;
-                    points.push(format!("[{wx},{wy}]"));
+                    if !first {
+                        out.push(',');
+                    }
+                    first = false;
+                    let _ = write!(out, "[{wx},{wy}]");
                 }
             }
         }
-        outlines.insert(island.id, format!("[{}]", points.join(",")));
+        out.push(']');
+        outlines.insert(island.id, out);
     }
 
     eprintln!("Built outlines for {} islands", outlines.len());

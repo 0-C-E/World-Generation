@@ -65,6 +65,8 @@ fn main() {
         config.map_size, config.map_size, config.seed, config.chunk_size
     );
 
+    let total_start = Instant::now();
+
     // Phase 1: Generate heightmap using fractal Brownian motion
     let elevation_grid = timed("Elevation", || elevation::generate(&config));
 
@@ -199,7 +201,11 @@ fn main() {
         }
     });
 
-    println!("\nGeneration complete. World saved to {}", OUTPUT_PATH);
+    println!(
+        "Generation complete in {:.2?}. World saved to {}",
+        total_start.elapsed(),
+        OUTPUT_PATH
+    );
 }
 
 /// Run a closure, measure its execution time, print elapsed time, and return result.
