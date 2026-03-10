@@ -158,7 +158,7 @@ fn count_neighbors(
 
     let mut land = 0;
     let mut water = 0;
-    let mut water_positions = Vec::with_capacity(4);
+    let mut water_positions = Vec::new();
 
     for &(dx, dy) in &DIRS {
         let nx = x as isize + dx;
