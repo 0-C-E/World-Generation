@@ -2,7 +2,7 @@ use crate::biome::{BiomeData, ResourceModifiers};
 
 pub const DATA: BiomeData = BiomeData {
     name: "Forest",
-    modifiers: ResourceModifiers::new(30, 0, 10, 0, 0),
+    modifiers: ResourceModifiers::new(30, -5, 10, -20, -15),
     has_gold_veins: false,
     // Sinusoidal elevation variation gives a canopy texture.
     land_color: Some(|t| {

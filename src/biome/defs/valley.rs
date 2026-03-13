@@ -2,7 +2,7 @@ use crate::biome::{BiomeData, ResourceModifiers};
 
 pub const DATA: BiomeData = BiomeData {
     name: "Valley",
-    modifiers: ResourceModifiers::new(15, 0, 20, 0, 0),
+    modifiers: ResourceModifiers::new(15, -5, 20, -15, -15),
     has_gold_veins: true,
     land_color: Some(|t| {
         [

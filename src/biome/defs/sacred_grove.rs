@@ -2,7 +2,7 @@ use crate::biome::{BiomeData, ResourceModifiers};
 
 pub const DATA: BiomeData = BiomeData {
     name: "Sacred Grove",
-    modifiers: ResourceModifiers::new(15, 0, 5, -20, 20),
+    modifiers: ResourceModifiers::new(10, -20, 5, -25, 30),
     has_gold_veins: false,
     land_color: Some(|t| {
         [
